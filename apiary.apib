@@ -1,0 +1,4864 @@
+FORMAT: 1A
+HOST: http://217.67.177.50:40084/
+HOST1: http://polls.apiblueprint.org/
+
+# Vocord Microcyclops, Netcam AI API
+
+Vocord Microcyclope camera's Rest API Prototype.
+
+## Group All request
+
+> ## Used in {__Traffic, Netcam__}
+
+
+* В случае если ответ подразумевает возвращение массивов данных в полях ответа, а данных для этих полей нет, то будет возвращаться пустой массив внутри Response 200 (если отдельно не описано исключение)
+
+
+Общие поля всех запросов и ответов (если отдельно не описано исключение)
+
+### ALL Gets [GET,DELETE,POST,PUT]
++ **X-Token** содержит security token для доступа к настройкам системы. Token состоит из символов [0-9a-f] первые 32 символа это содержимого HTTP заголовка "X-Server-Challenge:" ($SC) затем без пробелов следует 32 символа сгенерированных на стороне веб клиента ($CC) и 32 символа ($HASH) результата генераци MD5 над строкой "$PWH$CC$SC$PWH" ($PWH это MD5 от пароля при авторизации).
+
++ Headers
+
+        X-Token: $SC$CC$HASH
+        Connection: close
+
+Пример генерация **X-Token**
+допустим что:
+    сервер прислал следующую строку в HTTP заголовке **X-Server-Challenge:**: "0f94b2e901d3deea2a5dd7baf0198fe2", те $SC EQ 0f94b2e901d3deea2a5dd7baf0198fe2"
+    клиент сгенерировал $CC EQ "b003076be1eb7655e304efe08ac06d7a"
+    пароль используемый для авторизации был "12345678"
+
+тогда $PWH=MD5("12345678") что EQ "25d55ad283aa400af464c76d713c07ad"
+
+$HASH=MD5("$PWH$SC$CC$PWH");
+$HASH=MD5("**25d55ad283aa400af464c76d713c07ad**0f94b2e901d3deea2a5dd7baf0198fe2**b003076be1eb7655e304efe08ac06d7a**25d55ad283aa400af464c76d713c07ad");
+что EQ "12af517e07dab91ddb96b4f44603651d"
+значит клиент должен будет послать в HTTP заголовке запроса:
+**X-Token:** 0f94b2e901d3deea2a5dd7baf0198fe2**b003076be1eb7655e304efe08ac06d7a**12af517e07dab91ddb96b4f44603651d
+Общие HTTP заголовки любых ответов
+
++ **X-Token-Expired-In:** опциональный заголовок, содержит оставшееся время валидности "token" в секундах, по истечении которого необходимо заново пройти авторизацию.
+
++ **X-Server-Challenge:** обязательный заголовок, содержит набор случайных данных для генерации X-Token на стороне клиента.
+
++ Response ANY (application/json)
+
+    + Headers
+
+        X-Server-Challenge: 32 ASCII symbols generated on server side
+        Connection: close
+
+Необходима повторная авторизация.
+
++ Response 403 (application/json)
+
+    + Headers
+
+        X-Role: none
+        X-Server-Challenge: 32 ASCII symbols generated on server side
+
+    + Body
+
+            {
+                "status": "Security token expired",
+            }
+
+Нет прав выполнить данную операцию.
+
++ Response 403 (application/json)
+
+    + Headers
+        X-Server-Challenge: 32 ASCII symbols generated on server side
+
+    + Body
+
+            {
+                "status": "Operation Not Permited",
+            }
+
+
+Невалидные поля в запросе.
+
++ Response 422 (application/json)
+
+    + Headers
+
+        X-Server-Challenge: 32 ASCII symbols generated on server side
+
+    + Body
+
+            {
+                "status": "Invalid field content",
+            }
+
+## Group ACL Traffic
+
+* ACL role ANY
+    * Форма логина.
+
+* ACL role power
+    * Форма Администрирование/Обслуживание только группа Система с кнопочкой и диалогом по ней. Группа Дополнительно не должна отображаться (если нету роли admin)
+
+* ACL role monitor
+    * Основная форма (в случае успешной авторизации), без возможности менять импульс прожектора.
+    * Форма Администрирование/Состояние Комплекса
+    * Форма диагностики состояния оптической калибровки
+
+* ACL role settings
+    * Все формы за исключением форм Поверки, Администрирования/{Сеть, Безопасность, Сертификат, Система}
+    * +Форма диагностики состояния оптической калибровки
+    * +Форма ручного редактирования оптической калибровки и запуска автоматической калибровки.
+
+* ACL admin
+    * Все формы
+    
+## Group ACL Netcam AI
+* ACL role ANY
+    * Форма логина.
+
+* ACL role power
+    * Форма Администрирование/Обслуживание только группа Система с кнопочкой и диалогом по ней. Группа Дополнительно не должна отображаться (если нету роли admin)
+
+* ACL role monitor
+    * Основная форма (в случае успешной авторизации), без возможности менять импульс прожектора.
+    * Форма Администрирование/Состояние Комплекса
+    * Форма диагностики состояния камеры
+
+* ACL role settings
+    * Все формы за исключением форм Администрирования/{Сеть, Безопасность, Сертификат, Система}
+    
+* ACL admin
+    * Все формы
+
+# Group API Administration
+
+## Authorization and Users [/admin/auth/{login}]
+
+> ### Used in {__Traffic, Netcam__}
+
+### +Get Server Challange [GET]
+
++ Request
+
+    + Parameters
+
+        + login (string,optional) ... user name to connect. Not implemented.
+
+
++ Response 200 (application/json)
+
+    + Headers
+
+            X-Server-Challenge: 0f94b2e901d3deea2a5dd7baf0198fe2
+
+    + Body
+
+            {
+                "status": "no-error",
+            }
+
+### +Send Auth Credentals [POST]
+
++ Request (application/json)
+
+    + Parameters
+
+        + login (string,optional) ... user name to connect. Not implemented.
+
+    + Headers
+
+            X-Token: 0f94b2e901d3deea2a5dd7baf0198fe2b003076be1eb7655e304efe08ac06d7a12af517e07dab91ddb96b4f44603651d
+
+    + Attributes
+
+        + login (string) - user name used for authorization. Поле login потенциально может содержать любую **utf8** строку. Однако желательно ограничение **ASCII** символами для гарантированой возможности использования с различных устройств. Если по какой-либо причине символ **"\x00"** будет внутри значения этого поля, то значение поля будет обрезано до предыдущего символа (или до пустого значения, если этот символ будет первым)
+
+    + Body
+
+            {
+                "login": "admin"
+            }
+
++ Response 200 (application/json)
+
+    + Headers
+
+            X-Server-Challenge: 0f94b2e901d3deea2a5dd7baf0198fe2
+
+    + Attributes
+
+        + role (array) - список доступных ролей пользователя.
+            + "admin"       (string, optional) - доступны все формы и настройки (втч форма "администрирование"  и ее субформы)
+            + "settings"    (string, optional) - доступны установки для настройки основного функционала (форма "настройки" и ее субформы)
+            + "monitor"     (string, optional) - доступны формы для мониторинга работы основного функционала
+            + "power"       (string, optional) - доступна форма для перезагрузки/выключения устройства
+            + "connect"     (string, optional) - account с данной ролью может использоваться только для авторизации внешних соединений, наличие этой роли автоматически отменяет все остальные. account с login **"key-secret"** может иметь только эту роль.
+
+    + Body
+
+            {
+                "status": "no-error",
+                  "role": [ "admin", "settings", "monitor", "connect", "power" ]
+            }
+
++ Response 403 (application/json)
+
+    + Headers
+
+            X-Server-Challenge: 0f94b2e901d3deea2a5dd7baf0198fe2
+
+    + Body
+
+            {
+                "status": "Access denied"
+            }
+
+## Users settings and Enumeration [/user/{user}]
+
+> ### Used in {__Traffic, Netcam__}
+
+### +Get user details [GET]
+
++ Parameters
+
+    + user (string) ... user name to get details
+
++ Response 200 (application/json)
+
+        {
+            "status": "no-error",
+            "users": {
+                "name": "admin",
+                "role": [ "monitor" ]
+            }
+        }
+
++ Response 404 (application/json)
+
+    + Body
+
+            {
+                "status": "User not found",
+            }
+
++ Response 423 (application/json)
+
+    + Attributes  (object)
+
+        + status (enum) - error type.
+
+            + "Resourse temporary locked"
+
+    + Body
+
+            {
+                "status": "Resourse temporary locked",
+            }
+
+### +Update user details [PUT]
+
++ Parameters
+
+    + user (string) ... user name to update
+
++ Request (application/json)
+
+    + Parameters
+
+        + user (string) ... user name to update user name used for authorization. Это потенциально может содержать любую **utf8** строку. Однако желательно ограничение **ASCII** символами для которых не нужно дополнительное квотирование и замена для гарантированой возможности использования с различных устройств.
+
+    + Attributes
+
+        + name (string) - new user name to be for authorization.
+        + role (array) - массив строк доступных ролей пользователя.
+        + password (string) - new pasword for updated user.
+
+    + Body
+
+            {
+                "name": "admin",
+
+                "role": [ "monitor" ],
+
+                "password": "new password"
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
++ Response 404 (application/json)
+
+    + Body
+
+            {
+                "status": "User not found",
+            }
+
++ Response 423 (application/json)
+
+    + Attributes  (object)
+
+        + status (enum) - error type.
+
+            + "New name already exist"
+            + "Unable to remove admin rights from last admin user"
+            + "Resourse temporary locked"
+
+    + Body
+
+            {
+                "status": "New name already exist",
+            }
+
+
+### +Delete user [DELETE]
+
++ Parameters
+
+    + user (string) ... user name to delete
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
++ Response 404 (application/json)
+
+    + Body
+
+            {
+                "status": "User not found",
+            }
+
++ Response 423 (application/json)
+
+    + Attributes (object)
+
+        + user (string) - last admin capable user.
+
+        + status (enum) - error type.
+            + "Unable to delete last user with admin rights"
+            + "Resourse temporary locked"
+
+    + Body
+
+            {
+                "status": "Unable to delete last user with admin rights",
+                "user": "admin",
+            }
+
+### +Create a new user [POST /user/]
+
++ Request (application/json)
+
+    + Body
+
+            {
+                "name": "admin",
+                "role": [ "settings", "power" ],
+                "password": "new password"
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
++ Response 423 (application/json)
+
+    + Attributes  (object)
+
+        + status (enum) - error type.
+            + "New name already exist"
+            + "Too many users"
+            + "Resourse temporary locked"
+
+    + Body
+
+            {
+                "status": "New name already exist",
+            }
+
+### +Get list of all users [GET /users]
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error",
+                "users": [
+                        {
+                            "name": "admin",
+                            "role": [ "admin" ]
+                        },
+                        {
+                            "name": "simpleUser",
+                            "role": [ "monitor", "power" ]
+                        },
+                ]
+            }
+
+
+## COM Ports settings [/admin/uarts]
+
+> ### Used in {__Traffic, Netcam__}
+
+### -Get uarts [GET]
+
++ Response 200 (application/json)
+
+    + Attributes
+
+        + `id` (string) - Uart port id.
+        + `name` (string) - Uart port name.
+        + `protocols` (array[string]) - array of available APP level protocols.
+        + `protocols_loc` (array[string],optional) - array of available localized names of APP level protocols.
+        + `protocol` (string) - APP level protocol of the paticular UART.
+        
+        + `interfaces` (array[string]) - array of available interfaces for the particular UART.
+        + `interface` (string) - interface of the particular UART.
+
+        + `speeds` (array[number]) - array of available bit speeds for the particular UART.
+        + `speed` (number) - bit speed of the paticular UART.
+        
+        + `bits` (number) - bits in byte of the paticular UART.
+        + `parity` (string) - parity type of the paticular UART.
+        + `xon_xoff` (boolean) - Do usr XON/XOFF flow control
+    + Body
+
+            {
+                "status": "no-error",
+
+                "uarts": [
+                    {
+                        "id": 0,
+                        "name": "Port A",
+        
+                        "protocols": ["none", "control", "radar-smartmicro"],
+                        "protocols_loc": ["Нет", "Управление", "Радар смартмикро"],
+                        "protocol": "none",
+                    
+                        "interfaces": ["RS-232", "RS-232 CTS/RTS", "RS-422", "RS-485"],
+                        "interface": "RS-232",
+                    
+                        "speeds": [9600, 19200, 38400, 57600, 115200, 230400],
+                        "speed": 115200,
+
+                        "bits": 8,
+                        "parity": "none",
+                    
+                        "stop_bits": 1,
+                    
+                        "xon_xoff": true
+                    },
+                    {
+                        "id": 1,
+                        "name": "Port B(Radar)",
+
+                        "protocols": [ "none", "control", "radar-smartmicro" ],
+                        "protocols_loc": ["Нет", "Управление", "Радар смартмикро"],
+                        "protocol": "radar-smartmicro",
+
+                        "interfaces": ["RS-232", "RS-422", "RS-485"],
+                        "interface": "RS-485",
+
+                        "speeds": [9600, 19200, 38400, 57600, 115200, 230400],
+                        "speed": 230400,
+
+                        "bits": 8,
+                        "parity": "none",
+
+                        "stop_bits": 1,
+
+                        "xon_xoff": true
+                    }
+                ]
+            }
+
++ Response 404 (application/json)
+
+    + Body
+
+            {
+                "status": "Port not found id: 2",
+            }
+
+### -Update uart settings [PUT]
+
++ Request (application/json)
+
+    + Body
+
+            {
+                "uarts": [
+                    {
+                        "id": 0,
+                        "name": "Port A",
+        
+                        "protocol": "none",
+                    
+                        "interface": "RS-232",
+                        "speed": 115200,
+                        "bits": 8,
+                        "parity": "none",
+                        "stop_bits": 1,
+                        "xon_xoff": true
+                    },
+                    {
+                        "id": 1,
+                        "name": "Port B(Radar)",
+
+                        "protocol": "radar-smartmicro",
+
+                        "interface": "RS-485",
+                        "speed": 230400,
+                        "bits": 8,
+                        "parity": "none",
+                        "stop_bits": 1,
+                        "xon_xoff": true
+                    }
+                ]
+
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
++ Response 404 (application/json)
+
+    + Body
+
+            {
+                "status": "Port not found id: 2",
+            }
++ Response 400 (application/json)
+
+    + Attributes (object)
+
+        + status (enum[string]) - operation status
+
+            + Members
+
+                + `uart id %u invalid-settings-range`
+                + `uart id %u missed-field`
+    + Body
+
+            {
+                "status": "uart id: missed-field name"
+            }
+
+## -Connections Info [/admin/connections]
+
+> ### Used in {__Traffic, Netcam__}
+
+Поддержка планируется не скоро.
+Описание закоментировано.
+<!--
+### Get online connections [GET]
+Если это будет делаться конечно.
+
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error",
+                "connections": [
+                        {
+                            "user_name": "admin",
+                            "role": "admin",
+                            "client_ip": "ipv4 or ipv6 string",
+                            "client_port": 42380,
+                            "session_start_at": "contains the number of milliseconds elapsed since 1/1/1970."
+                        },
+                        {
+                            "user_name": "simpleUser",
+                            "role": "monitor",
+                            "client_ip": "ipv4 or ipv6 string",
+                            "client_port": 42380,
+                            "session_start_at": "contains the number of milliseconds elapsed since 1/1/1970."
+                        },
+                ]
+            }
+
+-->
+
+## -Archive [/archive?count=10&page=2]
+
+> ### Used in {__Traffic__}
+
+Поддержка планируется не скоро.
+Описание закоментировано.
+<!--
+Sort get options:
+start_date,
+finish_date,
+speed,
+ts_number,
+violation
+
+
+
+### Get N records seek by page [GET]
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error",
+                "records": [
+                    {
+                        "date": "2015-08-05T08:40:51.620Z",
+                        "ts_number": "P803",
+                        "ts_number_img": "http://url-for-image.png",
+                        "ts_number_recognized_img": "http://url-for-image.png",
+                        "reliability": 55,
+                        "speed": 70,
+                        "violation": 20,
+                        "ts_images": [
+                            "http://url-for-image.png",
+                            "http://url-for-image.png"
+                        ]
+                    }
+                ]
+            }
+
+## Archive clear [/archive/{id}/clear]
+
+### Action with record [POST]
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
+
+-->
+## Events [/events?count=10&page=2]
+
+> ### Used in {__Traffic, Netcam__}
+
+Поддержка планируется не скоро.
+Описание закоментировано.
+<!--
+Sort get options:
+start_date,
+finish_date,
+event_type,
+user
+
+### Get N events seek by page [GET]
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+                "events": [
+                    {
+                        "date": "2015-08-05T08:40:51.620Z",
+                        "type": "info",
+                        "user_name": "system",
+                        "description": "Some message from camera.",
+                    }
+                ]
+            }
+
+## Event clear [/events/{id}/clear]
+
+### Action with events [POST]
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
+## Event set read all message [/events/{id}/mark-as-read]
+
+### Action with events [POST]
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
+-->
+
+
+## Location Settings [/settings/location]
+
+> ### Used in {__Traffic, Netcam__}
+
+### +Get current location settings [GET]
+
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + `horizontal_roll` (string) - [0.00, 360.00) or "unknown" крен в градусах точность 2 десятичных знака.
+        + `elevation_tilt` (string) - [-90.00, 90.00] or "unknown" тангаж в градусах точность 2 десятичных знака.
+        + `azimuth_yaw` (string) - [0.00, 360.00] or "unknown" азимут(рыскание) в градусах точность 2 десятичных знака.
+
+        + height (string) - [-2097150.000, 2097151.000] or "unknown" высота над поверхностью в метрах точность 3 десятичных знака.
+
+        + altitude (string) - [-2097150.000, 2097151.000] or "unknown" высота над уровнем моря в метрах точность 3 десятичных знака.
+        + latitude (string) - Широта градусы [-90.000000, +90.000000]  or "unknown" точность 6 десятичных знака после запятой.
+        + longitude (string) - Долгота градусы [-180.000000, +180.000000]  or "unknown"  точность 6 десятичных знака после запятой.
+
+        + `use_gnss` (boolean) - использовать GNSS для получения **"latitude"**, **"longitude"**, **"altitude"**.
+        + `gnss_filter_samples` (number) - [1, 3600] Число сэмплов данных для фильтра даннных от GNSS, EQ 0 фильтр выключен.
+
+    + Body
+
+            {
+                "horizontal_roll": "0.000",
+                "elevation_tilt": "0.000",
+                "azimuth_yaw": "west",
+
+                "height": "5.12",
+
+                "use_gnss": true,
+
+                "gnss_filter_samples": 10,
+
+                "latitude": "-34.397",
+                "longitude": "150.644",
+
+                "status": "no-error"
+            }
+
+### +Update location settings [PUT]
+
++ Request (application/json)
+
+    + Attributes (object)
+
+        + `use_gnss` (boolean) - использовать GNSS для получения **"latitude"**, **"longitude"**, **"altitude"**, в случае значения true данные полей **"latitude"**, **"longitude"**, **"altitude"** игнорируются.
+
+    + Body
+
+            {
+                "horizontal_roll": "0.230",
+                "elevation_tilt": "0.600",
+                "azimuth_yaw": "90",
+
+                "height": "5.12",
+
+                "use_gnss": false,
+
+                "gnss_filter_samples": 10,
+
+                "altitude": "10.123",
+                "latitude": "-34.397",
+                "longitude": "150.644"
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
+## Regional Settings [/settings/regional]
+
+> ### Used in {__Traffic, Netcam__}
+
+### +Get supported countries list [GET /settings/regional/countries]
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "countries": ["Russia", "Kazakhstan"],
+                "status": "no-error"
+            }
+
+### +Get current time [GET /settings/regional/time/{source}]
+
++ Parameters
+
+    + source: `system` (enum[string],optional) ... time source.
+
+        + `system` ... System time
+        + `capture` ... Data flow last sample timestamp
+        + `pll` ... Internal PLL synced with NTP or GNSS one PPS.
+
+        + Members
+
+            + `capture`
+            + `system`
+            + `pll`
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "time": "capture",
+                "source": "system",
+                "status": "no-error"
+            }
+
+### +Get current regional settings [GET]
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "tz_name": "GMT+3",
+                "leap_seconds": false,
+
+                "country": "Russia",
+                "place": "Mitino",
+                "language": "ru",
+
+                "status": "no-error"
+            }
+
+### +Update regional settings [PUT]
+
++ Request (application/json)
+
+    + Attributes (object)
+
+        + tz_name (string, required) - time zone file name.
+        + leap_seconds (boolean, optional) - if enabled do not discard leap seconds like in AT.
+        + country (string, optional) - Country name ?for regional settings?.
+        + language (string, optional) - Interface language two digit code.
+        + place (string, optional) - City, site or zone of system residence/administration district.
+
+    + Body
+
+            {
+                "tz_name": "GMT+8",
+                "leap_seconds": false,
+
+                "language": "ru",
+                "country": "Russia",
+                "place": "Mitino"
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
++ Response 400 (application/json)
+
+    + Body
+
+            {
+                "status": "tz_name or alternative params set not provided"
+            }
+
+## Network Settings [/admin/net/if]
+
+> ### Used in {__Traffic, Netcam__}
+
+### +Get network interfaces names [GET]
+
++ Response 200 (application/json)
+
+    + Attributes  (object)
+
+        + names (array,fixed-type) - Network interfaces names array.
+            + *"eth0"*
+
+    + Body
+
+            {
+                "names": [
+                    "eth0",
+                    "wan0"
+                ],
+
+                "status": "no-error"
+            }
+
+### +Get network interfaces settings [GET /admin/net/if/{name}]
+
++ Parameters
+
+    + name: 'eth0' (string,required) - interface name.
+
++ Response 200 (application/json)
+
+    + Attributes  (object)
+
+        + ifs (string, required) - Network interface name.
+
+        + mode (enum, optional) - mode of operation, if absent used "dhcp+fb".
+            + "static" - static ip address assigment.
+            + "dhcp+fb" - use static fallback IP address if dhcp not available, when DHCP address available switch to it and disable fallback address.
+            + "disabled" - interface disabled (this value supported only on devices which support multiple interfaces).
+
+        + fb (object, optional, fixed-type) - fallback/static network settings array.
+            + ip (string) - ip+netmask in form "Ix.Iy.Iz.It/M".
+            + gw (string,optional) - ip address of default gateway.
+
+        + aliases (array, optional, fixed-type) - Network interface aliases settings array. Aliases always active on interface if present.
+            + (string) - ip+netmask in form "Ix.Iy.Iz.It/M".
+
+        + routes (array, optional, fixed-type) - static routes array.
+            + (object,fixed-type)
+                + net (string) - network address + netmask in form "Nx.Ny.Nz.Nt/M" оr "default" which EQ to "0.0.0.0/0".
+                + gw (string, optional) - ip address of gateway for "net" node, if not present or EQ "0.0.0.0" considered as local to interface route.
+
+    + Body
+
+            {
+                "ifs": "eth0",
+
+                "mode": "dhcp+fb",
+
+                "fb": {
+                    "ip": "10.10.10.10/8",
+                    "gw": "10.150.239.3"
+                },
+
+                "aliases": [
+                    "10.150.239.33/24"
+                ],
+
+                "routes": [
+                    {
+                        "net":   "default",
+                        "gw": "10.150.239.3"
+                    },
+                    {
+                        "net":   "10.10.0.0/16",
+                        "gw": "10.150.239.1"
+                    },
+                    {
+                        "net":   "10.11.0.0/16",
+                        "gw": "10.150.239.2"
+                    }
+                ],
+
+                "status": "no-error",
+            }
+
++ Response 404 (application/json)
+
+    + Body
+
+            {
+                "status": "Interface not found",
+            }
+
+### +Update network settings [PUT]
+
++ Request (application/json)
+
+    + Body
+
+            {
+                "ifs": "eth0",
+
+                "mode": "dhcp+fb",
+
+                "fb": {
+                    "ip": "10.10.10.10/8",
+                    "gw": "10.150.239.3"
+                },
+
+                "aliases": [
+                    "10.150.239.33/24"
+                ],
+
+                "routes": [
+                    {
+                        "net":   "default",
+                        "gw": "10.150.239.3"
+                    },
+                    {
+                        "net":   "10.10.0.0/16",
+                        "gw": "10.150.239.1"
+                    },
+                    {
+                        "net":   "10.11.0.0/16",
+                        "gw": "10.150.239.2"
+                    }
+                ]
+
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
++ Response 404 (application/json)
+
+    + Body
+
+            {
+                "status": "Interface not found"
+            }
+
++ Response 501 (application/json)
+
+    + Body
+
+            {
+                "status": "Interface renames not supported"
+            }
+
+## System status [/admin/status]
+
+> ### Used in {__Traffic, Netcam__}
+
+### +Get current system status [GET /admin/status]
+
++ Response 200 (application/json)
+
+    + Attributes  (object)
+
+        + temp (array[object], optional) - Temperature sensors values.
+            + name (string) - sensor name.
+            + val (string) - temperature value 2 digits after decimal point.
+
+        + heater (enum, optional) - Heater state.
+            + "unknown" (string) - Unknown state or heater is absent.
+            + "off" (string) - Heater is off manual control.
+            + "on" (string) - Heater is on manual control.
+            + "auto-on" (string) - Heater is on automatic control.
+            + "auto-off" (string) - Heater is off automatic control.
+
+        + fan (enum, optional) - Fan state.
+            + "unknown" (string) - Unknown state or fan is absent.
+            + "off" (string) - Fan is off manual control.
+            + "on" (string) - Fan is on manual control.
+            + "auto-on" (string) - Fan is on automatic control.
+            + "auto-off" (string) - Fan is off automatic control.
+
+        + uptime (number, required) - System uptime in seconds.
+        + mem (object, required) - Memory statistic.
+            + free (number, required) - Free memory in KiB.
+            + buf (number, required) - Memory allocated for file I/O bufs in KiB.
+            + total (number, required) - Total memory in KiB.
+        + load (array[number], required) - system load avg (multiplayed by 65536) over the last 1, 5 and 15 minutes.
+        + proc_count (number,required) - processes count.
+
+        + `network_adapter` (array, optional, fixed-type) - Array of network adapters status.
+            + (object,fixed-type) - Network adapter status container.
+            + ifs (string) - Interface name.
+            + link (string) - Ethernet Link State.
+            + caps (array) - Ethernet interface capabilities.
+            + adva (array) - Ethernet interface capabilities advertized.
+            + advb (array) - Ethernet interface capabilities received from link party.
+            + ip (array,optional) - Interface ip addresses and nets list.
+                + (string) - Interface ip/net address.
+                
+        + `operating_mode` (string) - Current operating mode.
+        + `operating_modes` (array[string]) - Operating modes.
+            + `primary` - Primary Firmware.
+            + `secondary` - Secondary Firmware.
+            + `rescue` - Mode for rescue Primary or Secondary Firmware.
+        + firmware (array[object]) - Array of Firmware components revisions.
+            + component (string) - Firmware component name.
+            + version (string) - Firmware component revision.
+            + `build_time` (string) - Firmware component build time.
+    + Body
+
+            {
+                "status": "no-error",
+                "temp": [
+                    {
+                        "name": "chassic",
+                        "val": "+6.40"
+                    },
+                    {
+                        "name": "GPU",
+                        "val": "+10.15"
+                    },
+                    {
+                        "name": "CPU",
+                        "val": "+15.22"
+                    },
+                    {
+                        "name": "env",
+                        "val": "-12.06"
+                    }
+                ],
+                "heater": "unknown",
+                "fan": "unknown",
+                "load":[1002, 340, 232],
+                "uptime": 32224,
+                "mem": {
+                    "total": 1998,
+                    "free": 524,
+                    "buff": 400
+                },
+                "proc_count": 34,
+                "firmware": [
+                    {
+                        "component": "main",
+                        "version": "1.2.0",
+                        "build_time": "2015-08-05T08:40:51.620Z"
+                    },
+                    {
+                        "component": "traffic",
+                        "version": "4.2.0",
+                        "build_time": "2018-01-05T08:40:51.620Z"
+                    },
+                ],
+                "network_adapter": [
+                    {
+                        "ifs": "eth0",
+                        "link": "1000BaseTX FD FlowControll",
+                        "caps": ["10BaseTX FD/HD", "100BaseTX FD/HD", "1000BaseTX FD/HD", "FlowControll"]
+                        "adva": ["10BaseTX FD/HD", "100BaseTX FD/HD", "1000BaseTX FD", "FlowControll"]
+                        "advb": ["10BaseTX FD/HD", "100BaseTX FD/HD", "1000BaseTX FD/HD" ]
+                        "ip": ["10.10.10.10/24", "172.16.23.5/12"]
+                    }
+                ],
+                "operating_modes": ["primary", "secondary"],
+                "operating_mode": "primary"
+            }
+
+## Certificate Settings [/admin/certificate]
+
+> ### Used in {__Traffic, ?Netcam?__}
+
+### +Get current certificate settings [GET]
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "serial_number": "SNMitino",
+                "serial_number_vocord": "SNNUC1",
+                "certificate": "Mitino",
+                "certificate_number": "Mitino",
+                "name": "Mitino",
+                "okato": "123321",
+                "start_date": "2015-08-05T08:40:51.620Z",
+                "finish_date": "2015-08-05T08:40:51.620Z",
+                "verification_start_date": "2015-08-05T08:40:51.620Z",
+                "verification_finish_date": "2015-08-05T08:40:51.620Z",
+                "public_key_url": "cert.pub.pem"
+                "status": "no-error"
+            }
+
+### +Update certificate settings [PUT]
+
++ Request (application/json)
+
+    + Body
+
+            {
+                "serial_number": "SNMitino",
+                "serial_number_vocord": "SNNUC1",
+                "certificate": "Mitino",
+                "certificate_number": "Mitino",
+                "name": "Mitino",
+                "okato": "123321",
+                "start_date": "2015-08-05T08:40:51.620Z",
+                "finish_date": "2015-08-05T08:40:51.620Z",
+                "verification_start_date": "2015-08-05T08:40:51.620Z",
+                "verification_finish_date": "2015-08-05T08:40:51.620Z"
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
+## Service Settings [/admin/net/service]
+
+> ### Used in {__Traffic, Netcam__}
+
+### +Get service settings [GET]
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "zabix_ip": "127.0.0.1",
+                "syslog_ip": "127.0.0.1",
+                "wifi_ssid": "vocord-guest",
+                "wifi_password": "somepass",
+                "status": "no-error"
+            }
+
+### +Update service settings [PUT]
+
++ Request (application/json)
+
+    + Body
+
+            {
+                "zabix_ip": "127.0.0.1",
+                "syslog_ip": "127.0.0.1",
+                "wifi_ssid": "vocord-guest",
+                "wifi_password": "somepass"
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
+### Device power & reboot [/admin/reboot]
+
+> ### Used in {__Traffic, Netcam__}
+
+### +Reboot camera [PUT]
+
++ Request (application/json)
+
+    + Attributes (object)
+
+        + mode (enum) - режим загрузки
+            + primary (string) - первичная прошивка
+            + secondary (string) - вторичная прошивка
+
+    + Body
+
+            {
+                "mode": "primary"
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
+## Firmware Update [/admin/firmware/state]
+
+> ### Used in {__Traffic, Netcam__}
+
+### -Upload firmware Image [POST /file/fw/$head/$head_hash]
+
++ Request (application/octet-stream)
+
+    + Parameters
+
+        + `head` (number) - offset in octets of fw block. If 0 then fw file trunced.
+        + `head_hash` (string) - hex representation of SHA-1 sum of fw file till head.
+
+
++ Response 200 (application/json)
+
+    + Attributes
+
+        `fw_head` (number) - received fw size.
+        `fw_rwin` (number) - next request maximum size.
+        `fw_head_hash` (string) - SHA-1 of received consecutive fw blob in HEX representation.
+        `fw_id` (string) - some id from frontend to identify data source and server client.
+
+    + Body
+
+            {
+                "status": "no-error",
+                "fw_head":0,
+                "fw_rwin":1200,
+                "fw_head_hash":"d41d8cd98f00b204e9800998ecf8427e",
+                "fw_id":"some id from frontend"
+            }
+
+
++ Response 422 (application/json)
+
+    + Attributes
+
+        `fw_head` (number) - received fw size.
+        `fw_rwin` (number) - next request maximum size.
+        `fw_head_hash` (string) - SHA-1 of received consecutive fw blob in HEX representation.
+        `fw_id` (string) - some id from frontend to identify data source and server client.
+    
+    + Body
+
+            {
+                "status": "no-error",
+                "fw_head":0,
+                "fw_rwin":1200,
+                "fw_head_hash":"d41d8cd98f00b204e9800998ecf8427e",
+                "fw_id":"some id from frontend"
+            }
+
++ Response 413 (text/html)
+
+    + Body
+
+            "<html><body>\r\n"       
+            "<h1>Request Too BIG.</h1>\r\n"        
+            "</body></html>\r\n"
+
+### -Get firmware state [GET]
+
++ Response 200 (application/json)
+
+    + Attributes
+
+        + `sources` (array[string]) - Firmware data sources.
+
+            + Members
+                + `file`
+                + `ext_server_manual` - manualy controlled update from ext server
+                + `default_server_manual` - manualy controlled update from default ext server
+                + `ext_server_auto` - automatic controlled update from ext server
+                + `default_server_auto` - automatic controlled update from default ext server
+
+        + `source` (enum[string]) - Firmware data source.
+        + `ext_url` (string,optional) - ext server URL.
+        + `fw_size` (number,optional) - received by _PUT_ fw total size.
+        + `fw_head` (number,optional) - received total consecutive firmware octets by _POSTs_.
+        + `fw_rwin` (number) - next request maximum size.
+        + `fw_hash` (string,optional) - SHA-1 of  total consecutive firmware octets by _POSTs_ in HEX representation.
+        + `fw_id` (string,optional) - some id from frontend to identify data source and server client.
+        + `operating_mode` (string) - Current operating mode.
+        + `operating_modes` (array[string]) - Operating modes.
+            + `primary` - Primary Firmware.
+            + `secondary` - Secondary Firmware.
+            + `rescue` - Mode for rescue Primary or Secondary Firmware.
+        + `avl_ops` (array[enum]) - Current allowed ops
+            + Members
+                `upload_start` - FRONTEND may initiate manual uploads by device from external servers.
+                `upload_cancel` - FRONTEND may cancel currently performed manualy controlled uploads.
+                `upload_more` - FRONTEND may continue FW file uploading into device.
+                `upload_wait` - FRONEND may wait complete of FW uploads initiated by device (from external servers).
+                `set_params` - FRONTEND may specify new FW file upload params or change FW source, this action cancel uploads from external server if new source is `file`.
+                `checks_wait` - FRONEND should wait completion of FW validating procedure.
+                `update_start` - FRONEND may start device update with complete downloaded and ready FW.
+                `update_wait` - FRONEND should wait completion of FW update procedure.
+                `reboot` - FRONTEND may reboot device to other operation mode.
+        + `state` (enum[string]) - Current Firmware update procedure status
+            + Members
+                `New FW revision is Available`
+                `FW Up to date`
+                `Ready to download FW`
+                `Ready to update FW`
+                `Download FW in progress`
+                `Validating FW in progress`
+                `Update FW completed`
+                `ERROR:Update FW FAILED`
+                `ERROR:FW structure damaged`
+                `ERROR:FW not sutable for device`
+                `ERROR:FW component revisions conflict`
+        + `firmware_old` (array[object],optional) - Array of current Firmware components revisions.
+            + `component` (string) - Firmware component name.
+            + `version` (string) - Firmware component revision.
+            + `build_time` (string) - Firmware component build time.
+        + `firmware_new` (array[object],optional) - Array of downloaded Firmware components revisions.
+            + `component` (string) - Firmware component name.
+            + `version` (string) - Firmware component revision.
+            + `build_time` (string) - Firmware component build time.
+
+    + Body
+
+            {
+                "status": "no-error",
+                "operating_modes":["primary","secondary"],
+                "operating_mode":"primary",
+                "sources":["file", "ext_server_manual", "default_server_manual", "ext_server_auto", "default_server_auto"],
+                "source": "file",
+                "ext_url": "http://10.45.67.8/stable",
+                "state": "Ready to download FW",
+                "fw_rwin":1200,
+                "fw_size":35567893,
+                "fw_head":0,
+                "fw_hash":"d41d8cd98f00b204e9800998ecf8427e",
+                "fw_id":"some id from frontend",
+                "state":"Download FW in progress",
+                "avl_ops":["upload_cancel","upload_more","set_params","reboot"]
+            }
+
+### -Set firmware state [PUT]
+
++ Request 200 (application/json)
+
+    + Attributes
+
+        + `source` (enum[string]) - Firmware data source.
+        + `ext_url` (string,optional) - ext server URL.
+        + `fw_size` (number,optional) - received file size.
+        + `fw_hash` (string,optional) - SHA-1 of total fw image in HEX representation.
+        + `fw_id` (string,optional) - some id from frontend to identify data source and server client.
+        + `avl_ops` (array[enum]) - Current allowed ops
+            + Members
+                `upload_start` - FRONTEND may initiate manual uploads by device from external servers.
+                `upload_cancel` - FRONTEND may cancel currently performed manualy controlled uploads.
+                `upload_more` - FRONTEND may continue FW file uploading into device.
+                `upload_wait` - FRONEND may wait complete of FW uploads initiated by device (from external servers).
+                `set_params` - FRONTEND may specify new FW file upload params or change FW source, this action cancel uploads from external server if new source is `file`.
+                `checks_wait` - FRONEND should wait completion of FW validating procedure.
+                `update_start` - FRONEND may start device update with complete downloaded and ready FW.
+                `update_wait` - FRONEND should wait completion of FW update procedure.
+                `reboot` - FRONTEND may reboot device to other operation mode.
+        + `state` (enum[string]) - Current Firmware update procedure status
+            + Members
+                `New FW revision is Available`
+                `FW Up to date`
+                `Ready to download FW`
+                `Ready to update FW`
+                `Download FW in progress`
+
+    + Body
+
+            {
+                "source": "file",
+                "ext_url": "http://10.45.67.8/stable",
+                "fw_size":35567893,
+                "fw_hash":"25d55ad283aa400af464c76d713c07ad",
+                "fw_id":"10.24.56.78 session rev 3.5.67."
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error",
+                "avl_ops":["upload_more", "set_params", "reboot"]
+            }
+
+### -Update firmware [PUT /admin/firmware/update]
+
++ Request 200 (application/json)
+
+    + Attributes
+
+        + `cmd` (enum[string]) - Firmware cmd.
+            + Members
+            
+                + `update` (string) - Do firmware update.
+                + `cancel` (string) - Cancel manualy initiated upload FW if performed. Remove firmware file.
+
+    + Body
+
+            {
+                "cmd": "update"
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
+### Export settings [/admin/export]
+
+> ### Used in {__Traffic, Netcam__}
+
+Поддержка планируется не скоро.
+Причем не факт что это нужно.
+Описание закоментировано.
+<!--
+### Get current export settings [GET]
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error",
+                "on": true,
+                "format": "Kris",
+                "potok_plus": true,
+                "export_path": "C:\exportDir",
+                "free_space": "1233222",
+                "sort_by_dir": true,
+                "dir_template": "%date:dd:MM.yyyy",
+                "export_login": "someExportLogin",
+                "export_password": "someExportPassword",
+            }
+
+### Update export settings [PUT]
+
++ Request (application/json)
+
+            {
+                "on": true,
+                "format": "Kris",
+                "potok_plus": true,
+                "export_path": "C:\exportDir",
+                "sort_by_dir": true,
+                "dir_template": "%date:dd:MM.yyyy",
+                "export_login": "someExportLogin",
+                "export_password": "someExportPassword",
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
+-->
+## Group API Traffic
+
+## Traffic mode of operation [/settings/traffic/mode]
+
+> ### Used in {__Traffic__}
+Traffic Analizer daemon params.
+
+### -Get traffic mode [GET]
+
++ Response 200 (application/json)
+
+    + Attributes
+
+        + `status` (string) - error status.
+
+        + `active_connection` (object) - support active connection to Traffic Logical Block.
+        
+            + `enable` (boolean) - enable.
+            + `dst` (string) - dst ip or FQDN
+            + `port` (number) - dst tcp port
+
+        + `archive_if` (object) - support archive interface.
+        
+            + `enable` (boolean) - enable archive interface.
+            + `require_active_connection` (boolean)
+
+    + Body
+
+            {
+                "status": "no-error",
+                "active_connection": {
+                    "enable": true,
+                    "dst": "192.168.3.226",
+                    "port": 10003,
+                    "default_port": 10003
+                },
+                "archive_if": {
+                    "enable" : true,
+                    "require_active_connection":true
+                }
+            }
+
++ Response 404 (application/json)
+
+    + Body
+
+            {
+                "status": "no-data",
+            }
+
+### -Set traffic mode [PUT]
+
++ Request (application/json)
+
+    + Attributes
+
+        + `active_connection` (object) - support active connection to Traffic Logical Block.
+        
+            + enable (boolean) - enable.
+            + dst (string) - dst ip or FQDN
+            + port (number) - dst tcp port
+
+        + `archive_if` (object) - support archive interface.
+        
+            + enable (boolean) - enable archive interface.
+
+    + Body
+
+            {
+                "status": "no-error",
+                "active_connection": {
+                    "enable": true,
+                    "dst": "192.168.3.226",
+                    "port": 10003,
+                    "default_port": 10003
+                },
+                "archive_if": {
+                    "enable" : true
+                }
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error",
+            }
+
+
+## Camera connection [/settings/traffic/source]
+
+> ### Used in {__Traffic, ?Netcam?__}
+
+Параметры соединения со съемником.
+
+### -Get source info [GET]
+
++ Response 200 (application/json)
+
+    + Attributes
+
+        + `status` (string) - error status.
+        
+        + `types` (array[string]) - supported data sources.
+
+        + `type` (enum[string]) - Data source type
+
+            + external  (string)  - External IP camers.
+            + internal  (string)  - Internal Sensor.
+            + record    (string)  - File.
+
+            + Members
+
+                + `external`
+                + `internal`
+                + `record`
+
+        + `external` (object,optional) - External IP camera connection parameters.
+            + `user_name` (string,optional) - user name for authentication of External IP camera conection.
+            + `password` (string,optional) - user password for authentication of External IP camera conection.
+            + `client_id` (string) - IP addres, FQDN, device name or device `host_id` to connect.
+            + `default_client_id`: Factory Default device name to connect.
+
+        + `record` (object,optional) - Record parameters needed to use it.
+            + `URL` (string) - record URL for example "file:///home/data/records/2018-07-01.et1.raw"
+            + `loop` (boolean) - cyclicaly play record flag.
+
+        + `internal` (object,optional) - Internal sensor parameters.
+            + `device` (string) - Device node path.
+
+    + Body
+
+            {
+                "status": "no-error",
+                "types": ["internal","external","record"],
+                "type": "external",
+                "external": {
+                    "user_name": "admin",
+                    "password": "1",
+                    "client_id": "ipv4 or device name or device HOST ID string",
+                    "default_client_id": "umc-nc4-003245de452f"
+                },
+                "record": {
+                    "URL" : "file:///home/data/records/2018-07-01.et1.raw",
+                    "loop": false
+                },
+                "internal": {
+                    "device" : "/dev/video0"
+                }
+            }
+
++ Response 201 (application/json)
+
+    + Body
+
+            {
+                "status": "params-corrected"
+            }
+
+### -Set source info [PUT]
+
++ Request (application/json)
+
+    + Attributes
+
+        + type (enum[string]) - Data source type
+
+            + external  (string)  - External IP camers.
+            + internal  (string)  - Internal Sensor.
+            + record    (string)  - File.
+
+            + Members
+
+                + `external`
+                + `internal`
+                + `record`
+
+        + `external` (object,optional) - External IP camera connection parameters.
+            + `user_name` (string,optional) - user name for authentication of External IP camera conection.
+            + `password` (string,optional) - user password for authentication of External IP camera conection.
+            + `client_id` (string) - IP addres, FQDN, device name or device `host_id` to connect.
+            + `default_client_id`: Factory Default device name to connect.
+            
+        + `record` (object,optional) - Record parameters needed to use it.
+            + `URL` (string) - record URL for example "file:///home/data/records/2018-07-01.et1.raw"
+            + `loop` (boolean) - cyclicaly play record flag.
+            
+        + `internal` (object,optional) - Internal sensor parameters.
+            + `device` (string) - Device node path.
+
+    + Body
+
+            {
+                "type": "external",
+                "external": {
+                    "user_name": "admin",
+                    "password": "1",
+                    "client_id": "ipv4 or device name or device HOST ID string",
+                    "default_client_id": "umc-nc4-003245de452f"
+                },
+                "record": {
+                    "URL" : "file:///home/data/records/2018-07-01.et1.raw",
+                    "loop": false
+                },
+                "internal": {
+                    "device" : "/dev/video0"
+                }
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error",
+            }
+
+
+## Traffic lanes settings [/settings/traffic/lanes]
+
+> ### Used in {__Traffic__}
+
+### +Get all traffic lanes [GET]
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + `max_speed` (number) - Global Max speed.
+        + `name` (string) - ???Road name???.
+        + `traffic_on_camera` (boolean) - Is traffic directed to camera.
+        + `oncoming_traffic` (boolean) - Do record oncoming traffic violations.
+
+        + lanes (array) - Array of traffic lanes
+            + (object) - One Traffic lane settings
+                * `lane_type` (enum) - Type of Road part.
+                    * "lane" - обычная полоса движения ТС.
+                    * "bus-lane" - полоса движения маршрутных ТС.
+                    * "road-side" - обочина.
+                    * "empty" - не контролировать эту полосу.
+
+                + max_speed (number) - Max speed allowed on lane.
+                + `traffic_on_camera` (boolean) - Is traffic directed to camera.
+                + `oncoming_traffic` (boolean) - Do record oncoming traffic violations.
+                + name (string) - Road lane name.
+                + active (boolean) - Do control lane traffic.
+
+                + left (object) - left bound of Road part
+                    + top (array, fixed) - top point of bound of Road part
+                        + *1* (number)
+                        + *0* (number)
+
+                    + bottom (array,fixed) - bottom point of bound of Road part
+                        + *100* (number)
+                        + *1000* (number)
+
+                + right (object) - right bound of Road part
+                    + top (array,fixed) - top point of bound of Road part
+                        + *500* (number)
+                        + *0* (number)
+
+                    + bottom (array,fixed) - bottom point of bound of Road part
+                        + *700* (number)
+                        + *1000* (number)
+
+    + Body
+
+            {
+                "status": "no-error",
+
+                "max_speed": 50,
+                "traffic_on_camera": true,
+                "oncoming_traffic": true,
+
+                "lanes": [
+                    {
+                        "lane_type": "bus-lane",
+                        "left": {
+                            "top":      [   0,    0 ],
+                            "bottom":   [ 512, 1551 ]
+                        },
+                        "right": {
+                            "top":      [  700,    0 ],
+                            "bottom":   [ 1200, 1551 ]
+                        },
+                        "name": "M1 XXX L1",
+                        "max_speed": 50,
+                        "traffic_on_camera": true,
+                        "active": true
+                    },
+                    {
+                        "lane_type": "road-side",
+                        "left": {
+                            "top":      [ 1200,    0 ],
+                            "bottom":   [ 2047, 1551 ]
+                        },
+                        "right": {
+                            "top":      [ 2047,    0 ],
+                            "bottom":   [ 2047, 1551 ]
+                        },
+                        "name": "M1 XXX L0",
+                        "max_speed": 50,
+                        "traffic_on_camera": false,
+                        "active": true
+                    }
+                ]
+            }
+
+### +Set all traffic lanes [PUT]
+
++ Request (application/json)
+
+    + Body
+
+            {
+                "max_speed": 50,
+                "traffic_on_camera": true,
+                "oncoming_traffic": true,
+
+                "lanes": [
+                    {
+                        "lane_type": "bus-lane",
+                        "left": {
+                            "top":      [   0, -200 ],
+                            "bottom":   [ 512, 1551 ]
+                        },
+                        "right": {
+                            "top":      [  700,    0 ],
+                            "bottom":   [ 1200, 1551 ]
+                        },
+                        "name": "M1 XXX L1",
+                        "max_speed": 50,
+                        "traffic_on_camera": true,
+                        "active": true
+                    },
+                    {
+                        "lane_type": "lane",
+                        "left": {
+                            "top":      [  701,    0 ],
+                            "bottom":   [ 1201, 1551 ]
+                        },
+                        "right": {
+                            "top":      [ 1199,    0 ],
+                            "bottom":   [ 2047, 1551 ]
+                        },
+                        "name": "M1 road XXX L2",
+                        "max_speed": 50,
+                        "traffic_on_camera": true,
+                        "active": true
+                    },
+                    {
+                        "lane_type": "road-side",
+                        "left": {
+                            "top":      [ 1200,    0 ],
+                            "bottom":   [ 2048, 1551 ]
+                        },
+                        "right": {
+                            "top":      [ 2047,    0 ],
+                            "bottom":   [ 2247, 1551 ]
+                        },
+                        "name": "M1 XXX L0",
+                        "max_speed": 50,
+                        "traffic_on_camera": false,
+                        "active": true
+                    }
+                ]
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
+## Radar settings [/settings/traffic/radar]
+
+> ### Used in {__Traffic__}
+
+### +Get radar settings [GET]
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + `carrier_frequency_number` (number) - Radar frequency range number.
+        + `carrier_frequency_numbers` (array[number]) - Radar frequency range numbers.
+ 
+    + Body
+
+            {
+                "carrier_frequency_number": 12,
+                "carrier_frequency_numbers": [4,5,6,7,8,9,10,11,12,13,14,15,16,17,18],
+            }
+
+
+### +Update radar settings [PUT]
++ Request (application/json)
+
+            {
+                "carrier_frequency_number": 12
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
+
+## Plate settings [/settings/traffic/plates]
+
+> ### Used in {__Traffic__}
+
+Установки модуля распознавания гос номеров.
+### +Get plate settings [GET]
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + modules (array) - Plate recognition modules settings array.
+            + (object) - Plate recognition module settings
+                + active (boolean) - Module state.
+                + country (string) - Country name for plate recognition module RO,key.
+                + weight (number) - Minimal alloved Weight in percents for Positive decision.
+                
+        + `minimal_weight`  (number,optional) - Minimal alloved weight in percents for plate detector.
+
+    + Body
+
+            {
+                "modules": [
+                    {
+                        "country": "russia",
+                        "active": true,
+                        "weight": 100
+                    }
+                ],
+                "minimal_weight":60,
+                "status": "no-error"
+            }
+
+### +Update plate settings [PUT]
++ Request (application/json)
+
+    + Body
+
+            {
+                "modules": [
+                    {
+                        "country": "russia",
+                        "active": true,
+                        "weight": 100
+                    },
+                    {
+                        "country": "china",
+                        "active": true,
+                        "weight": 100
+                    }
+
+                ],
+                "minimal_weight":59.25,
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
+
+## Verification [/verification/status]
+
+> ### Used in {__Traffic__}
+
+Здесь видимо потребуется еще какое-то дополнительное API для получения сэмплов данных.
+Режимы *`radar_velocity`* и *'radar_angle'* пока не нужны, но скоро потребуются (На доп договор).
+
+Frontend дергает `Get verification Software module Info` в любое время.
+
+Frontend дергает `Get verification procedure status` в любое время чтобы понять что набрано нужное количество сэмплов и че вообще происходит (не факт что вам нужно).
+
+Frontend дергает `Start/stop verification procedure` в любое время, но в любое время работает только режим `stop`, остальные активируются только если в данный момент предыдущий запущенный режим завершился.
+
+Frontend дергает `Get complete verification procedure data` в любое время.
+
+Frontend дергает `Set current verification procedure measurement result data` в любое время. По истечении какого-то разумного времени изменения данных измерений будут блокироваться.
+
+Frontend дергает `Get perspective Calibration data` в любое время.
+
+Frontend дергает `Set perspective calibration data` в любое время. Если данные проходят валидацию тол они применяются. Если при этом в данный момент шла калибровка перспективы она останавливается со статусом 100%.
+
+### +Get verification Software module Info [GET /verification/sw]
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + `sw_name` (string) - Identification Metrological Software module name
+        + `sw_revision` (string) - Software revision.
+        + `sw_hash_type` (string) - Checksum hash alhorithm type.
+        + `sw_hash` (string) - Checksum hash value.
+
+    + Body
+
+            {
+                "status": "no-error",
+                "sw_name": "VTTrafficFL",
+                "sw_revision": "1.0",
+                "sw_hash_type": "SHA1",
+                "sw_hash": "E67E8C3687401DDEAA24BDA694F21664ADEB8D01"
+            }
+
+### +Get verification procedure status [GET]
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + `ready_samples` (number) - число готовых сэмплов данных
+        + `complete_status` (string) - процент завершения или "--" если статус не известен.
+        + mode (enum[string]) - запрашиваемый режим. В Response 409 режим с которым возник конфликт.
+            + "stop" - procedure stopped or idle.
+            + "time" - time verification.
+            + "gnss" - GNSS verification.
+            + "radar_velocity" - velocity verification, provided by radar.
+            + "radar_angle" - radar sourced angles and destination verification.
+            + "optical_velocity" - opyicaly estimated velocity verification.
+            + "perspective" - perspective calibration.
+
+    + Body
+
+            {
+                "status": "no-error"
+                "mode": "time",
+                "ready_samples": 9,
+                "complete_status": "100%"
+                "verification_start_date": "2015-08-05T08:40:51.620Z",
+                "verification_finish_date": "2015-08-05T08:40:51.620Z"
+            }
+
+### +Start/stop verification procedure [PUT]
++ Request (application/json)
+
+    + Attributes (object)
+
+        + `ready_samples` (number) - the number of ready data samples.
+        + `complete_status` (string) - percentage of completing or "--" if status is unknown.
+
+        + mode (enum[string]) - Requested mode. In case of Response 409, mode represents conflicting mode name.
+            + `time` - start verification of time.
+            + `gnss` - start verification of GNSS coordinates.
+            + `radar_velocity` - start verification of radar velocity.
+            + `radar_angle` - поверка радара (определение углов и расстояния).
+            + `optical_velocity` - start verification of optical velocity.
+            + `perspective` - start optical callibration ().
+            + `perspective_samples` - sample some video frames for manual optical perspective callibration.
+            + `stop` - stop current verification procedure.
+
+        + `probe_plate` (string,optional) - UTF-8 encoded plate number for verification probing (required for modes `radar_velocity`, `radar_angle`, `optical_velocity`).
+        + `lat_manual` (string,optional) - latitude in degrees [-90.000000, +90.000000]  or "unknown" accuracy 6 digits in fractional part. (required for mode `gnss`)
+        + `lon_manual` (string,optional) - longitude  in degrees [-180.000000, +180.000000]  or "unknown"  accuracy 6 digits in fractional part. (required for mode `gnss`)
+        + `perspective_confidence` (number,optional) - required confidence in percents for samples used for automatic perspective callibration (can be used for mode `perspective`).
+        + `perspective_estimation_time` (number,optional) - maximal time in seconds used for automatic perspective callibration procedure (can be used for mode `perspective`).
+
+    + Body
+
+            {
+                "mode": "gnss",
+                "lat_manual": "55.788873",
+                "lon_manual": "37.497962"
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
++ Response 400 (application/json)
+
+    + Attributes (object)
+
+        + status (enum[string]) - operation status
+
+            + Members
+
+                + `invalid-mode`
+                + `no-probe-coordinates-provided`
+                + `no-probe-plate-regexp-provided`
+    + Body
+
+            {
+                "status": "invalid-mode"
+            }
+
++ Response 409 (application/json)
+
+    + Attributes (object)
+
+        + `ready_samples` (number) - число готовых сэмплов данных
+        + `complete_status` (string) - процент завершения или "--" если статус не известен.
+
+        + mode (enum[string]) - режим с которым возник конфликт.
+            + time - идет поверка времени.
+            + gnss - идет поверка GNSS координат.
+            + `radar_velocity` - идет поверка радара (определение скорости).
+            + `radar_angle` - идет поверка радара (определение углов и расстояния).
+            + `optical_velocity` - идет поверка оптического определения скорости.
+            + perspective - идет калибровка перспективы.
+            + stop - с момента старта не производилась не калибровка ни поверка.
+
+        + status (enum[string]) - состояние
+
+            + perspective-not-calibrated - Необходима калибровка перспективы.
+            + busy - Не завершена текущая процедура поверки/калибровки (см mode)
+
+    + Body
+
+            {
+                "status": "busy",
+                "mode": "time",
+                "ready_samples": 1,
+                "complete_status": "10%",
+                "verification_start_date": "2015-08-05T08:40:51.620Z"
+            }
+
+### (+-)Get complete verification procedure data [GET /verification/samples/{date}/{mode}]
++ Parameters
+
+    + date: `current` (enum[string],required) - Time point.
+        + "current" - current may be incomplete data (data after last verification started)
+        + "last" - last complete data (which complete before verification started)
+
+        + Members
+            + `current`
+            + `last`
+
+
+
+    + mode: `gnss` (enum[string]) ... Samples data for this verification mode.
+        + `time` ... поверка времени(+).
+        + `gnss` ... поверка GNSS координат(+).
+        + `optical_velocity` ... поверка оптического распознавания скорости(+).
+        + `perspective_manual` ... data samples for manual perspective callibration(+).
+        + `radar_velocity` ... поверка радара определение скорости(-TODO).
+        + `radar_angle` ... поверка радара определение углов и расстояния(-TODO).
+
+        + Members
+            + `time`
+            + `gnss`
+            + `optical_velocity`
+            + `perspective_manual`
+            + `radar_velocity`
+            + `radar_angle`
+
++ Request (application/json)
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + mode (enum[string]) - Samples data for this verification mode.
+            + `time` - поверка времени.
+            + `gnss` - поверка GNSS координат.
+            + `radar_velocity` - поверка радара определение скорости.
+            + `radar_angle` - поверка радара определение углов и расстояния.
+            + `optical_velocity` - поверка оптического распознавания скорости.
+            + `perspective` - оптическая калибровка камеры.
+            + `perspective_manual` - ручная оптическая калибровка камеры (получить несколько сэмплов данных).
+
+        + description (string,optional) - some samples textual description.
+        + `verification_start_date` (string) - last complete verification start date UTC+00.
+        + `verification_finish_date` (string, optional) - last complete verification finish date UTC+00.
+        + `samples_ready` (number) - the number of ready samples in samples array.
+        + `samples_todo` (number) - the number of samples to be added into in samples array.
+        + `samples_max` (number) - the maximal number of samples which can be saved for current mode.
+        + `lat_manual` (string,optional) - latitude in degrees [-90.000000, +90.000000]  or "unknown" accuracy 6 digits in fractional part.
+        + `lon_manual` (string,optional) - longitude  in degrees [-180.000000, +180.000000]  or "unknown"  accuracy 6 digits in fractional part.
+        + `probe_plate` (string,optional) - UTF-8 encoded plate number for verification probing (required for modes `radar_velocity`, `radar_angle`, `optical_velocity`).
+        + samples (array[object]) - array of metadata for verification samples
+            + (object) - metadata for verification sample
+                + id (string,required) - data sample ident. For measured data updates.
+                + URL (string,required) - URL of image sample
+                + `plate_polygon` (array[number],optional) - array of X,Y coordinates of plate polygon.
+                + `plate_url` (string,optional) - URL of plate sample
+                + plate (string,optional) - UTF-8 encoded plate number
+                + `plate_reliability` (number,optional) - plate number recognition reliability in percents.
+                + `velocity_optical` (string,optional) - velocity according optical data.
+                + `velocity_radar` (string,optional) - velocity according radar data.
+                + `velocity_probe` (string,optional) - velocity according GNSS data on vehicle or immitation device.
+                + `distance_radar` (string,optional) - distance to radar.
+                + `distance_probe` (string,optional) - distance according immitation device or measured.
+                + `angle_radar` (string,optional) - angle to radar normal direction by radar.
+                + `angle_probe` (string,optional) - measured angle to radar normal direction.
+                + time (string) - sample capture time.
+                + lat (string,optional) - latitude in degrees from GNSS at sample capture time.
+                + lon (string,optional) - longitude in degrees from GNSS at sample capture time.
+
+    + Body
+
+            {
+                "status": "no-error",
+                "mode": "optical_velocity",
+                "samples_ready": 10,
+                "samples_todox": 6,
+                "samples_max": 16,
+                "description": "Туман."
+                "verification_start_date": "2015-08-05T08:40:51.620Z",
+                "verification_finish_date": "2015-08-05T08:40:51.620Z",
+                "lat_manual": "55.788882",
+                "lon_manual": "37.497970",
+                "samples": [
+                    {
+                        "id": "oewio34ur3498t895hgji5k4ng5kj",
+                        "URL": "/verification/gnss-2015-08-05T08-40-51.620Z/1.jpeg",
+                        "plate_polygon": [
+                            "576.2", "300.7",
+                            "729.2", "295.0",
+                            "732.7", "330.1",
+                            "578.4", "328.3"
+                        ],
+                        "plate_url": "/verification/gnss-2015-08-05T08-40-51.620Z/p1.jpeg",
+                        "plate": "о611нт150",
+                        "plate_reliability": 80,
+                        "time":"2015-08-05T08-40-52.6478944Z",
+                        "velocity_optical": "45.4",
+                        "velocity_radar": "46.1",
+                        "velocity_probe": "46.2",
+                        "distance_radar": "56.6",
+                        "distance_probe": "55.8",
+                        "angle_radar": "10",
+                        "angle_probe": "9",
+                        "lat": "55.788881",
+                        "lon": "37.497971"
+                    },
+                    {
+                        "id": "oewio34ur3498t895hgji5k4ng5kj",
+                        "URL": "/verification/gnss-2015-08-05T08-40-51.620Z/2.jpeg",
+                        "plate_polygon": [
+                            "1176.2", "803.6",
+                            "1329.1", "798.1",
+                            "1332.7", "833.2",
+                            "1178.5", "828.3"
+                        ],
+                        "plate_url": "/verification/gnss-2015-08-05T08-40-51.620Z/p2.jpeg",
+                        "plate": "о611нт150",
+                        "plate_reliability": 88,
+                        "time":"2015-08-05T08-40-52.6478944Z",
+                        "velocity_optical": "-",
+                        "velocity_radar": "95.1",
+                        "velocity_probe": "94.9",
+                        "distance_radar": "56.3",
+                        "distance_probe": "56.1",
+                        "angle_radar": "-5",
+                        "angle_probe": "-6",
+                        "lat": "55.788882",
+                        "lon": "37.497971"
+                    },
+                ]
+            }
+
+### (+-)Delete verification procedure data samples [PUT /verification/samples/current/{mode}]
++ Parameters
+
+    + mode: `gnss` (enum[string]) ... Samples data for this verification mode.
+        + `time` ... поверка времени(-).
+        + `gnss` ... поверка GNSS координат(-).
+        + `optical_velocity` ... поверка оптического распознавания скорости(-).
+        + `perspective_manual` ... data samples for manual perspective callibration.(-)
+        + `radar_velocity` ... поверка радара определение скорости(-TODO).
+        + `radar_angle` ... поверка радара определение углов и расстояния(-TODO).
+
+        + Members
+            + `time`
+            + `gnss`
+            + `optical_velocity`
+            + `perspective_manual`
+            + `radar_velocity`
+            + `radar_angle`
+
++ Request (application/json)
+
+    + Attributes (object)
+
+        + `samples_id`: '213421', '5346tt' (array[string]) - data sample idents to delete.
+            + 'oewio34ur3498t895hgji5k4ng5kj' ...
+            + 'oewio34ur3498t895hgji5k4nwqww' ...
+
+    + Body
+
+            {
+                "samples_id": [
+                        "oewio34ur3498t895hgji5k4ng5kj",
+                        "oewio34ur3498t895hgji5k4ng5kj"
+                ]
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
+### -Set current verification procedure measurement result data [PUT /verification/samples/data]
+
++ Request (application/json)
+
+    + Attributes (object)
+
+        + mode (enum[string]) - Samples data for this verification mode.
+            + "gnss" - поверка GNSS координат.
+            + "radar_velocity" - поверка радара определение скорости.
+            + "radar_angle" - поверка радара определение углов и расстояния.
+            + "optical_velocity" - поверка оптического распознавания скорости.
+
+        + description (string,optional) - some samples textual description.
+        + `lat_manual` (string,optional) - latitude in degrees [-90.000000, +90.000000]  or "unknown" accuracy 6 digits in fractional part. Required only in `gnss` mode.
+        + `lon_manual` (string,optional) - longitude  in degrees [-180.000000, +180.000000]  or "unknown"  accuracy 6 digits in fractional part. Required only in `gnss` mode.
+        + samples (array[object]) - array of metadata for verification samples
+            + (object) - metadata for verification sample
+                + id (string) - data sample ident. For measured data updates.
+                + `velocity_probe` (string,optional) - velocity according GNSS data on vehicle or immitation device.  Required in `optical_velocity`, `radar_velocity`, `radar_angle` modes.
+                + `distance_probe` (string,optional) - distance according immitation device or measured.  Required only in `radar_angle` mode.
+                + `angle_probe` (string,optional) - measured angle to radar normal direction. Required only in `radar_angle` mode.
+
+    + Body
+
+            {
+                "mode": "radar_angle",
+                "description": "Туман."
+                "lat_manual": "55.788882",
+                "lon_manual": "37.497970",
+                "samples": [
+                    {
+                        "id": "oewio34ur3498/t895hgji5k4ng5kj",
+                        "velocity_probe": "46.2",
+                        "distance_probe": "55.8",
+                        "angle_probe": "9",
+                    },
+                    {
+                        "id": "gerge/jh5jnGRE6896479f/ergeregj",
+                        "velocity_probe": "94.9",
+                        "distance_probe": "56.1",
+                        "angle_probe": "-6",
+                    },
+                ]
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error",
+            }
+
+### +Get perspective calibration data [GET /verification/perspective/{date}]
++ Parameters
+
+    + date (string,required) ... Time point.
+
+        + curent (string) ... current may be incomplete data (data after last verification started)
+
+        + last (string) ... last complete data (which complete before verification started)
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + state (enum[string]) - Samples data for this verification mode.
+            + "manual" - manual entered data.
+            + "automatic" - automaticaly calculated data.
+            + "incomplete" - automatic perspective calibration incomplete.
+            + "invalid" - no calibration data, calibration not performed.
+
+        + `road_polygon` (array[number]) - array of X,Y coordinates of 4 road points in meters units with of accurasy 2 decimal digits in fractional part.
+        + `image_polygon` (array[number]) - array of X,Y coordinates of 4 road points in pixels units.
+
+        + time (string) - actualization time of manual or automatic optical calibration data.
+        + lat (string) - latitude in degrees [-90.000000, +90.000000]  or "unknown" accuracy 6 digits in fractional part.
+        + lon (string) - longitude  in degrees [-180.000000, +180.000000]  or "unknown"  accuracy 6 digits in fractional part.
+        + `plate_angle` (string) - angle of plate with respect to image horizontal side at middle level of road on sampled image.
+        + `plate_min` (object) - minimal visible plate parameters on road polygon.
+            + width (string) - plate width in pixels on sampled image.
+            + level (string) - plate level in pixels on sampled image.
+            + `angle` (string,optional) - angle of plate with respect to image horizontal side at middle level of road on sampled image.
+            + x (string,optional) - x coordinate of plate
+            + `url` (string,optional) - data sample URL for minimal plate width measure (can return 403 if sample deleted).
+        + `plate_max` (object) - maximal visible plate parameters on road polygon.
+            + width (string) - plate width in pixels on sampled image.
+            + level (string) - plate level in pixels on sampled image.
+            + `angle` (string,optional) - angle of plate with respect to image horizontal side at middle level of road on sampled image.
+            + x (string,optional) - x coordinate of plate
+            + `url` (string,optional) - data sample URL for maximal plate width measure (can return 403 if sample deleted).
+        + `recognition_accuracy` (number) - plate recognition accuracy.
+        + `perspective_accuracy` (number) - automatic perspective calibration accuracy.
+        + `complete_status` (number,optional) - percent completion or "--" or absent if status unknown.
+
+    + Body
+
+            {
+                "status": "no-error",
+                "state": "incomplete",
+
+                "road_polygon": [
+                            "57.62", "30.07",
+                            "72.92", "29.50",
+                            "73.27", "33.01",
+                            "57.84", "32.83"
+                ],
+
+                "image_polygon": [
+                            300, 200,
+                            800, 207,
+                            700, 500,
+                            120, 505
+                ],
+
+                "plate_angle":    "11",
+
+                "plate_min": {
+                    "width":    "56",
+                    "level":    "500",
+                    "angle":    "1.0",
+                    "url":      "/samples/01d3ff0ecc3c3782.jpeg",
+                    "x":        "300"
+                },
+
+                "plate_max": {
+                    "width":    "128",
+                    "level":    "1350",
+                    "angle":    "3.0",
+                    "url":      "/samples/01d3ff0ecac66064.jpeg",
+                    "x":        "400"
+                },
+
+                "time":"2015-08-05T08-40-52.6478944Z",
+                "lat": "55.788882",
+                "lon": "37.497971",
+
+                "recognition_accuracy": 78,
+                "perspective_accuracy": 95,
+                "complete_status": 10
+            }
+
+### +Set perspective calibration data [PUT /verification/perspective/current]
+
++ Request (application/json)
+
+    + Attributes (object)
+
+        + `road_polygon` (array[string]) - array of X,Y coordinates of 4 road points in meters units with of accurasy 2 decimal digits in fractional part.
+        + `image_polygon` (array[number]) - array of X,Y coordinates of 4 road points in pixels units.
+        + `plate_min` (object) - minimal visible plate parameters on road polygon.
+            + width (string) - plate width in pixels on sampled image.
+            + level (string) - plate level in pixels on sampled image.
+            + `angle` (string,optional) - angle of plate with respect to image horizontal side at middle level of road on sampled image.
+            + x (string,optional) - x coordinate of plate
+            + `url` (string,optional) - data sample URL for minimal plate width measure (can return 403 if sample deleted).
+        + `plate_max` (object) - maximal visible plate parameters on road polygon.
+            + width (string) - plate width in pixels on sampled image.
+            + level (string) - plate level in pixels on sampled image.
+            + `angle` (string,optional) - angle of plate with respect to image horizontal side at middle level of road on sampled image.
+            + x (string,optional) - x coordinate of plate
+            + url (string,optional) - sample url 
+            + `url` (string,optional) - data sample URL for maximal plate width measure (can return 403 if sample deleted).
+
+    + Body
+
+            {
+                "road_polygon": [
+                            "57.62", "30.07",
+                            "72.92", "29.50",
+                            "73.27", "33.01",
+                            "57.84", "32.83"
+                ],
+
+                "image_polygon": [
+                            300, 200,
+                            800, 207,
+                            700, 500 ,
+                            120, 505
+                ],
+
+                "plate_min": {
+                    "width":    "56",
+                    "level":    "500",
+                    "angle":    "3.0",
+                    "x":        "200"
+                },
+
+                "plate_max": {
+                    "width":    "128",
+                    "level":    "1350",
+                    "angle":    "3.0",
+                    "x":        "400"
+                }
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
+
+## Group API Camera
+
+#### Get camera Auto profiles [GET /settings/camera/profile]
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + `profiles` (array)
+            + (object)
+                + `name` (string) - Profile name
+                + `exposition` (object) - exposition settings.
+                    + `exp_auto` (boolean) - Auto exposition mode enabled flag.
+                    + `exp_allow_us_range` (number) - Allowable Exposure Time range \[Min,Max\].
+                    + `exp_pref_us_range` (number) - Preferred Exposure Time range \[Min,Max\].
+                    + `adoptation_time` (number) - Algorithm adoptation time in seconds 2 digit precision.
+                    + `target_obj_size` (number) - Typical Plate Size in pixels.
+
+                    + `exp_mode` (enum[string]) - Auto exposition operation mode.
+                        + Members
+                            + `automatic` - Automatic switch between modes.
+                            + `normal` - Normal mode.
+                            + `backlight_compensation` - Backlight compensation.
+                            + `shadows_compensation` - Shadows compensation.
+                
+                    + `exp_modes` (array) - Automatic expostion modes params.
+                        + (object)
+                            + `id` (enum[string]) - Mode type.
+                                + Members
+                                    + `normal`
+                                    + `backlight_compensation`
+                                    + `shadows_compensation`
+                
+                            + `assymetric_adoptation_time` (number) - Algorithm adoptation time in seconds 2 digit precision.
+                            + `measure_type` (number) - Exposition estimation area and algorithm idx from zero in `measure_types_loc`.
+                            + `exp_pref_level` (number) - Preferred exposure level in %.
+                            + `brightness_balance` (number) - Balance of brightness in %.
+                            
+                + `exposition_switch` (object) - Exposition mode switch conditions settings.
+                    + `id` (enum[string]) - Mode name
+                        + Members
+                            + `shadows_compensation`
+                            + `backlight_compensation`
+                        
+                    + `camera_sun` (array[number]) - Angle of camera-Sun range or value for `current`, degrees \[0-360\)
+                    + `sun_heigh` (array[number]) - Height of the Sun range or value for `current`, degrees \(-10-90\)
+                    + `ilumination_index` (array[number]) - Illumination Index range or value for `current`
+
+                + `iris` (object)
+                    + `iris_mode` (enum[string]) - Iris control Mode see `iris_modes` field.
+                    + `iris_open_steps` (number) - Iris param for `force_semiopen` mode if P-IRIS lens not callibrated.
+                    + `iris_f_num_range` (array[number]) - Iris \[`min`, `max`\] range for `force_semiopen` or `iris_depth_priority` mode if P-IRIS lens callibrated.
+                    + `iris_open_f_num` (number) - Iris param for `force_semiopen` mode if P-IRIS lens callibrated.
+                    + `iris_depth_priority` (boolean) - Priority of the depth of field of the lens
+                    + `iris_depth_priority_range` (array[number]) - Minimal and maximal allowed Iris 
+                    + `iris_delay` (number) - Aperture control delay in seconds (hysteresis).
+                    + `iris_control_activity` (enum[string]) - Frequency of Aperture control actions.
+                        + Members
+                            + `economical`
+                            + `intensive`
+
+                + `wb`  (object)
+                    + `wb_mode` (number) - White Balnce Mode of operation idx from zero in `wb_modes_loc`.
+                    + `wb_measure` (number) - White Balnce measure algorithm idx from zero in `wb_measures_loc`.
+                    + `wb_method` (number) - White balance method idx from zero in `wb_methods_loc`.
+                    + `adoptation_time` (number) - Algorithm adoptation time in seconds.
+
+                    + `gains_manual` (array[number]) - Array of manual Bayer Pattern 2x2 componrnt gains \[R, G1, G2, B\].
+
+                + `gamma`  (object)
+                    + `separate_flows` (boolean) - if true then for all `gamma_flows` except `all` flows gamma settings should be present.
+                    + `gamma` (array) - gamma per flow settings.
+                        + (object)
+                            + `flow` (enum[string]) - flow name from `gamma_flows` settings.
+                            + `mode` (enum[string])
+                                + Members
+                                    + `automatic`
+                                    + `manual`
+
+                            + `gain` (number) - gain value for manual mode from `gains` field.
+                            + `method` (number) - Idx from zero in `gamma_methods_loc` array.
+                            + `smoothing_time` (number) - Smoothing time in seconds limited by `smoothing_time_max`.
+                            + `contrast_level_maximal` (number) - Maximal contrast level in %.
+                            + `contrast_level_relative` (number) - Relative contrast level in %.
+                            + `brightness_normalization` (number) - Degree of brightness normalization in %.
+                            + `backlight_compensation` (number) - Backlight Compensation parameter as idx (from zero) in `backlight_compensations_loc`.
+
+    + Body
+
+            {
+                "status":"no-error",
+                "profiles":[
+                    {
+                        "name":"Traffic",
+                        "exposition":{
+                            "exp_auto":true,
+                            "exp_allow_us_range":[100,5000],
+                            "exp_pref_us_range":[100, 3000],
+                            "adoptation_time":0,
+                            "target_obj_size":150,
+                            "exp_mode": "automatic",
+                            "exp_modes":[
+                                {
+                                    "id":"normal",
+                                    "assymetric_adoptation_time":0,
+                                    "measure_type":4,
+                                    "exp_pref_level":50,
+                                    "brightness_balance":50
+                                },
+                                {
+                                    "id":"backlight_compensation",
+                                    "assymetric_adoptation_time":500,
+                                    "measure_type":4,
+                                    "exp_pref_level":50,
+                                    "brightness_balance":50
+                                },
+                                {
+                                    "id":"shadows_compensation",
+                                    "assymetric_adoptation_time":-500,
+                                    "measure_type":4,
+                                    "exp_pref_level":50,
+                                    "brightness_balance":50
+                                }
+                            ]
+                        },
+                        "exposition_switch":[
+                            {
+                                "id":"backlight_compensation",
+                                "camera_sun":[125,235],
+                                "sun_heigh":[0,52],
+                                "ilumination_index":[0,1000]
+                            },
+                            {
+                                "id":"shadows_compensation",
+                                "camera_sun":[305,35],
+                                "sun_heigh":[5,52],
+                                "ilumination_index":[0,1000]
+                            }
+                        ],
+                        "iris":{   
+                            "iris_mode":"automatic",
+                            "iris_depth_priority":true,
+                            "iris_depth_priority_range":[5.6,16],
+                            "iris_delay":0.2,
+                            "iris_control_activity":"economical"
+                        },
+                        "wb":{
+                            "wb_mode":1,
+                            "wb_method":0,
+                            "wb_measure":1,
+                            "adoptation_time":5,
+                            "gains_manual":[1,0.8,0.9,1.1]
+                        },
+                        "gamma": {
+                            "separate_flows":false,
+                            "gamma":[
+                                {
+                                    "flow":"all",
+                                    "mode":"automatic",
+                                    "method":0,
+                                    "smoothing_time":5,
+                                    "contrast_level_maximal":52,
+                                    "contrast_level_relative":25,
+                                    "brightness_normalization":60,
+                                    "backlight_compensation":2
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+
+
+### Camera Exposition [/settings/camera/exposition]
+
+#### +-Get camera Expo settings [GET]
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + `exp_auto` (boolean) - Auto exposition mode enabled flag.
+        + `exp_us` (number) - exposition in microseconds, used if `exp_auto` EQ `false`.
+        + `exp_us_range` (number) - \[Min,Max\] range value of exposition for all exposition params for \[PUT\].
+        + `exp_allow_us_range` (number) - Allowable Exposure Time range \[Min,Max\].
+        + `exp_pref_us_range` (number) - Preferred Exposure Time range \[Min,Max\].
+        + `adoptation_time_range` (number) - Algorithm adoptation time range \[Min,Max\].
+        + `adoptation_time` (number) - Algorithm adoptation time in seconds 2 digit precision.
+        + `exp_mode` (enum[string]) - Auto exposition operation mode.
+            + Members
+                + `automatic` - Automatic switch between modes.
+                + `normal` - Normal mode.
+                + `backlight_compensation` - Backlight compensation.
+                + `shadows_compensation` - Shadows compensation.
+                
+        + `assymetric_adoptation_time_range` (number) - Algorithm adoptation time range \[Min,Max\] in seconds 2 digit precision.
+        + `target_obj_size` (number) - Typical Plate Size in pixels.
+        + `target_obj_size_range` (number) - Minimum Typical Plate Size range \[Min,Max\] in pixels.
+        + `measure_types_loc` (array[enum]) - Exposition estimation area and algorithm (localized names).
+
+        + `exp_modes` (array) - Automatic expostion modes params.
+            + (object)
+                + `id` (enum[string]) - Mode type.
+                    + Members
+                        + `normal`
+                        + `backlight_compensation`
+                        + `shadows_compensation`
+                
+                + `assymetric_adoptation_time` (number) - Algorithm adoptation time in seconds 2 digit precision.
+                + `measure_type` (number) - Exposition estimation area and algorithm idx from zero in `measure_types_loc`.
+                + `exp_pref_level` (number) - Preferred exposure level in %.
+                + `brightness_balance` (number) - Balance of brightness in %.
+
+    + Body
+
+            {
+                "status":"no-error",
+                "exp_auto":true,
+                
+                "exp_us":900,
+                "exp_us_range":[100, 75000],
+                
+                "exp_allow_us_range":[100, 5000],
+                
+                "exp_pref_us_range":[100, 3000],
+                
+                "adoptation_time":0,
+                "adoptation_time_range":[0, 20],
+                
+                "assymetric_adoptation_time_range":[-1000, 1000],
+                
+                "target_obj_size":150,
+                "target_obj_size_range":[25, 1920],
+
+                "measure_types_loc":["Сбалансированный", "Центрированный", "Усредненный", "Минимизация Яркости", "Адаптивный баланс"],
+                "exp_mode": "automatic",
+                "exp_modes":[
+                    {
+                        "id":"normal",
+                        "assymetric_adoptation_time":0,
+                        "measure_type":4,
+                        "exp_pref_level":50,
+                        "brightness_balance":50
+                    },
+                    {
+                        "id":"backlight_compensation",
+                        "assymetric_adoptation_time":500,
+                        "measure_type":4,
+                        "exp_pref_level":50,
+                        "brightness_balance":50
+                    },
+                    {
+                        "id":"shadows_compensation",
+                        "assymetric_adoptation_time":-500,
+                        "measure_type":4,
+                        "exp_pref_level":50,
+                        "brightness_balance":50
+                    }
+                ]
+            }
+            
+#### +-Set camera Expo settings [PUT]            
+            
++ Request (application/json)
+
+    + Attributes (object)
+
+        + `exp_auto` (boolean) - Auto exposition mode enabled flag.
+        + `exp_us` (number) - exposition in microseconds, used if `exp_auto` EQ `false`.
+        + `exp_allow_us_range` (number) - Allowable Exposure Time range \[Min,Max\].
+        + `exp_pref_us_range` (number) - Preferred Exposure Time range \[Min,Max\].
+        + `adoptation_time` (number) - Algorithm adoptation time in seconds 2 digit precision.
+        + `target_obj_size` (number) - Typical Plate Size in pixels.
+        + `exp_mode` (enum[string]) - Auto exposition operation mode.
+            + Members
+                + `automatic` - Automatic switch between modes.
+                + `normal` - Normal mode.
+                + `backlight_compensation` - Backlight compensation.
+                + `shadows_compensation` - Shadows compensation.
+                
+        + `exp_modes` (array) - Automatic expostion modes params.
+            + (object)
+                + `id` (enum[string]) - Mode type.
+                    + Members
+                        + `normal`
+                        + `backlight_compensation`
+                        + `shadows_compensation`
+                
+                + `assymetric_adoptation_time` (number) - Algorithm adoptation time in seconds 2 digit precision.
+                + `measure_type` (number) - Exposition estimation area and algorithm idx from zero in `measure_types_loc`.
+                + `exp_pref_level` (number) - Preferred exposure level in %.
+                + `brightness_balance` (number) - Balance of brightness in %.
+
+    + Body
+
+            {
+                "exp_auto":true,
+                "exp_us":900,
+                "exp_allow_us_range":[100, 5000],
+                "exp_pref_us_range":[100, 3000],
+                "adoptation_time":0,
+                "target_obj_size":150,
+                "exp_mode": "automatic",
+                "exp_modes":[
+                    {
+                        "id":"normal",
+                        "assymetric_adoptation_time":0,
+                        "measure_type":4,
+                        "exp_pref_level":50,
+                        "brightness_balance":50
+                    },
+                    {
+                        "id":"backlight_compensation",
+                        "assymetric_adoptation_time":500,
+                        "measure_type":4,
+                        "exp_pref_level":50,
+                        "brightness_balance":50
+                    },
+                    {
+                        "id":"shadows_compensation",
+                        "assymetric_adoptation_time":-500,
+                        "measure_type":4,
+                        "exp_pref_level":50,
+                        "brightness_balance":50
+                    }
+                ]
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
+### Camera Exposition Switch mode [/settings/camera/exposition/switch]
+
+#### Get camera Expo switch mode settings [GET]
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + `exposition_current` (object) - Current exposition switch arguments.
+            + `mode` (enum[string], optional) - Current Mode name.
+                + Members
+                    + `normal`
+                    + `shadows_compensation`
+                    + `backlight_compensation`
+            + `camera_sun` (number) - Current Angle of camera-Sun value, degrees \[0-360\)
+            + `sun_height` (number) - Current Height of the Sun value, degrees \(-10-90\)
+            + `ilumination_index` (number) - Current Illumination Index value
+                        
+                
+        + `exposition_switch` (array) - Exposition mode switch conditions.
+            + (object)
+                + `id` (enum[string]) - Mode name.
+                    + Members
+                        + `current_values` - current values.
+                        + `shadows_compensation`
+                        + `backlight_compensation`
+
+                + `camera_sun` (array[number]) - Angle of camera-Sun range, degrees \[0-360\)
+                + `sun_height` (array[number]) - Height of the Sun range, degrees \(-10-90\)
+                + `ilumination_index` (array[number]) - Illumination Index range
+
+    + Body
+
+            {   
+                "status": "no-error",
+                "exposition_current": {
+                        "mode":"normal",
+                        "camera_sun":1.8,
+                        "sun_height":14.23,
+                        "ilumination_index":34
+                },
+                "exposition_switch":[
+                    {
+                        "id":"backlight_compensation",
+                        "camera_sun":[125,235],
+                        "sun_height":[0,52],
+                        "ilumination_index":[0,1000]
+                    },
+                    {
+                        "id":"shadows_compensation",
+                        "camera_sun":[305,35],
+                        "sun_height":[5,52],
+                        "ilumination_index":[0,1000]
+                    }
+                ]
+            }
+
+#### Set camera Expo switch mode settings [PUT]            
+            
++ Request (application/json)
+
+    + Attributes (object)
+
+        + `exposition_switch` (array) - Exposition mode switch conditions.
+            + (object)
+                + `id` (enum[string]) - Mode name
+                    + Members
+                        + `shadows_compensation`
+                        + `backlight_compensation`
+                        
+                + `camera_sun` (array[number]) - Angle of camera-Sun range or value for `current`, degrees \[0-360\)
+                + `sun_height` (array[number]) - Height of the Sun range or value for `current`, degrees \(-10-90\)
+                + `ilumination_index` (array[number]) - Illumination Index range or value for `current`
+
+    + Body
+
+            {   
+                "exposition_switch":[
+                    {
+                        "id":"backlight_compensation",
+                        "camera_sun":[125,235],
+                        "sun_height":[0,52],
+                        "ilumination_index":[0,1000]
+                    },
+                    {
+                        "id":"shadows_compensation",
+                        "camera_sun":[305,35],
+                        "sun_height":[5,52],
+                        "ilumination_index":[0,1000]
+                    }
+                ]
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+            
+### Camera Iris [/settings/camera/iris]
+
+#### -Get camera Iris settings [GET]
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + `iris_modes_loc` (array[string]) - Available Modes for Iris control localized.
+        + `iris_modes` (array[enum]) - Available Modes for Iris control.
+            + Members
+                + `unmanaged` (string) - Iris can't be managed or manage disabled.
+                + `automatic` (string) - Do use automatic Iris control.
+                + `force_open` (string) - Force Open Iris.
+                + `force_close` (string) - Force Close Iris.
+                + `force_semiopen` (string) - Do semiopen Iris according to F number or step number.
+
+        + `iris_mode` (enum[string]) - Iris control Mode see `iris_modes` field.
+        + `iris_callibrated` (boolean) - Simple IRIS callibration status.
+        + `iris_open_steps_max` (number) - Iris maximal param for `force_semiopen` mode if P-IRIS lens not callibrated.
+        + `iris_open_steps` (number) - Iris param for `force_semiopen` mode if P-IRIS lens not callibrated.
+        + `iris_f_num_range` (array[number]) - Iris \[`min`, `max`\] range for `force_semiopen` or `iris_depth_priority` mode if P-IRIS lens callibrated.
+        + `iris_open_f_num` (number) - Iris param for `force_semiopen` mode if P-IRIS lens callibrated.
+        + `iris_depth_priority` (boolean) - Priority of the depth of field of the lens
+        + `iris_depth_priority_range` (array[number]) - Minimal and maximal allowed Iris 
+        + `iris_delay` (number) - Aperture control delay in seconds (hysteresis).
+        + `iris_control_activity` (enum[string]) - Frequency of Aperture control actions.
+            + Members
+                + `economical`
+                + `intensive`
+    + Body
+
+            {   
+                "iris_modes":["unmanaged", "automatic", "force_open", "force_close", "force_semiopen"],
+                "iris_modes_loc":["Недоступно", "Автоматически", "Открыта полностью", "Закрыта полностью", "Открыта частично"],
+                "iris_mode":"automatic",
+                "iris_callibrated":true,
+                "iris_open_steps_max":80,
+                "iris_f_num_range":[1.4,16]
+                "iris_depth_priority":true,
+                "iris_depth_priority_range":[5.6,16],
+                "iris_delay":0.2,
+                "iris_control_activity":"economical"
+                "status": "no-error"
+            }
+
+#### -Set camera Iris settings [PUT]
++ Request (application/json)
+
+    + Attributes (object)
+
+        + `iris_mode` (enum[string]) - Iris control Mode see `iris_modes` field.
+        + `iris_open_steps` (number) - Iris param for `force_semiopen` mode if P-IRIS lens not callibrated.
+        + `iris_f_num_range` (array[number]) - Iris \[`min`, `max`\] range for `force_semiopen` or `iris_depth_priority` mode if P-IRIS lens callibrated.
+        + `iris_open_f_num` (number) - Iris param for `force_semiopen` mode if P-IRIS lens callibrated.
+        + `iris_depth_priority` (boolean) - Priority of the depth of field of the lens
+        + `iris_depth_priority_range` (array[number]) - Minimal and maximal allowed Iris 
+        + `iris_delay` (number) - Aperture control delay in seconds (hysteresis).
+        + `iris_control_activity` (enum[string]) - Frequency of Aperture control actions.
+            + Members
+                + `economical`
+                + `intensive`
+    + Body
+
+            {   
+                "iris_mode":"automatic",
+                "iris_depth_priority":true,
+                "iris_depth_priority_range":[5.6,16],
+                "iris_delay":0.2,
+                "iris_control_activity":"economical"
+            }
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
++ Response 201 (application/json)
+
+    + Attributes (object)
+
+    + Body
+
+            {
+                "status": "params-correctedr"
+                "iris_mode":"automatic",
+                "iris_depth_priority":true,
+                "iris_depth_priority_range":[8,16],
+                "iris_delay":0.2,
+                "iris_control_activity":"economical"
+            }
+
+### Camera White Balance [/settings/camera/wb]
+
+#### -Get camera WB settings [GET]
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + `wb_modes_loc` (array[string]) - White Balnce Mode of operation List localized.
+        + `wb_mode` (number) - White Balnce Mode of operation idx from zero in `wb_modes_loc`.
+        + `wb_methods_loc` (array[string]) - White balance supported methods.
+        + `wb_method` (number) - White balance method idx from zero in `wb_methods_loc`.
+        + `wb_measures_loc` (array[enum]) - White Balnce measures algorithms.
+            + Members
+                `center_weighted`
+                `uniform`
+        + `wb_measure` (number) - White Balnce measure algorithm idx from zero in `wb_measures_loc`.
+
+        + `adoptation_time_range` (number) - Algorithm adoptation time range \[Min,Max\].
+        + `adoptation_time` (number) - Algorithm adoptation time in seconds 2 digit precision.
+
+        + `gains_range` (array[number]) - Allowed \[Min, Max\] range for manual components gains.
+        + `gains` (array[number]) - Array of current Bayer Pattern 2x2 componrnt gains \[R, G1, G2, B\].
+        + `gains_manual` (array[number]) - Array of manual Bayer Pattern 2x2 componrnt gains \[R, G1, G2, B\].
+
+    + Body
+
+            {
+                "status": "no-error",
+                "wb_modes_loc": ["manual", "automatic"],
+                "wb_mode":1,
+                "wb_methods_loc":["adaptive"],
+                "wb_method":0,
+                "wb_measures_loc":["center_weighted","uniform"],
+                "wb_measure":1,
+                "adoptation_time":5,
+                "adoptation_time_range":[0,50],
+                "gains_range":[0.5,4],
+                "gains_manual":[1,0.8,0.9,1.1],
+                "gains":[1.05,0.87,0.91,1.15]
+            }
+            
+#### -Set camera WB settings [PUT]
+
++ Request (application/json)
+
+    + Attributes (object)
+
+        + `wb_mode` (number) - White Balnce Mode of operation idx from zero in `wb_modes_loc`.
+        + `wb_method` (number) - White balance method idx from zero in `wb_methods_loc`.
+        + `wb_measure` (number) - White Balnce measure algorithm idx from zero in `wb_measures_loc`.
+        + `adoptation_time` (number) - Algorithm adoptation time in seconds.
+        + `gains` (array[number]) - Array of current Bayer Pattern 2x2 componrnt gains \[R, G1, G2, B\].
+        + `gains_manual` (array[number]) - Array of manual Bayer Pattern 2x2 componrnt gains \[R, G1, G2, B\].
+
+    + Body
+
+            {   
+                "wb_mode":1,
+                "wb_method":0,
+                "wb_measure":1,
+                "adoptation_time":5,
+                "gains_manual":[1,0.8,0.9,1.1]
+            }
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
++ Response 201 (application/json)
+
+    + Attributes (object)
+
+    + Body
+
+            {
+                "wb_mode":1,
+                "wb_measure":1,
+                "adoptation_time":5,
+                "gains_manual":[1,0.8,0.9,1.1],
+                "status": "params-corrected"
+            }
+            
+### Camera Gamma [/settings/camera/gamma]
+
+#### +-Get camera Gamma settings [GET]
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + `gamma_flows` (array[enum]) - White Balnce Mode of operation List.
+            + Members
+                + `all` (string) - Gamma for all flows.
+                + `RAW` (string) 
+                + `JPEG` (string)
+                + `H26x` (string)
+                
+
+        + `gamma_methods_loc` (array[enum]) - Available automatic gamma correction methods (localized names).
+            + Members
+                + `histogram_normalization`
+                + `histogram_alignment`
+                + `brightness_correction`
+        
+        + `gains` (array[number]) - Possible gains values for manual mode.
+        + `smoothing_time_max` (number) Maximum smoothing time in seconds.
+        + `backlight_compensations_loc` (array[string]) - Backlight Compensation localized parameters.
+        + `separate_flows` (boolean) - if true then for all `gamma_flows` except `all` flows gamma settings should be present.
+        + `gamma` (array) - gamma per flow settings.
+            + (object)
+                + `flow` (enum[string]) - flow name from `gamma_flows` settings.
+                + `mode` (enum[string])
+                    + Members
+                        + `automatic`
+                        + `manual`
+
+                + `gain` (number) - gain value for manual mode from `gains` field.
+                + `method` (number) - Idx from zero in `gamma_methods_loc` array.
+                + `smoothing_time` (number) - Smoothing time in seconds limited by `smoothing_time_max`.
+                + `contrast_level_maximal` (number) - Maximal contrast level in %.
+                + `contrast_level_relative` (number) - Relative contrast level in %.
+                + `brightness_normalization` (number) - Degree of brightness normalization in %.
+                + `backlight_compensation` (number) - Backlight Compensation parameter as idx (from zero) in `backlight_compensations_loc`.
+    + Body
+
+            {
+                "status": "no-error",
+                "gamma_flows":["all","RAW","JPEG"],
+                "separate_flows":true,
+                "gamma_methods_loc":["histogram_normalization", "histogram_alignment", "brightness_correction"],
+                "gains":[0.5,1,2,4,8,16],
+                "smoothing_time_max":40,
+                "backlight_compensations_loc":["off", "auto", "auto_increased", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%"],
+                "gamma":[
+                    {
+                        "flow":"JPEG",
+                        "mode":"manual",
+                        "gain":1,
+                    },
+                    {
+                        "flow":"JPEG",
+                        "mode":"automatic",
+                        "method":0,
+                        "smoothing_time":5,
+                        "contrast_level_maximal":52,
+                        "contrast_level_relative":25,
+                        "brightness_normalization":60,
+                        "backlight_compensation":0
+                    }
+                ]
+            }
+            
+#### -Set camera Gamma settings [PUT]
+
++ Request (application/json)
+
+    + Attributes (object)
+
+        + `separate_flows` (boolean) - if true then for all `gamma_flows` except `all` flows gamma settings should be present.
+        + `gamma` (array) - gamma per flow settings.
+            + (object)
+                + `flow` (enum[string]) - flow name from `gamma_flows` settings.
+                + `mode` (enum[string])
+                    + Members
+                        + `automatic`
+                        + `manual`
+
+                + `gain` (number) - gain value for manual mode from `gains` field.
+                + `method` (number) - Idx from zero in `gamma_methods_loc` array.
+                + `smoothing_time` (number) - Smoothing time in seconds limited by `smoothing_time_max`.
+                + `contrast_level_maximal` (number) - Maximal contrast level in %.
+                + `contrast_level_relative` (number) - Relative contrast level in %.
+                + `brightness_normalization` (number) - Degree of brightness normalization in %.
+                + `backlight_compensation` (number) - Backlight Compensation parameter as idx (from zero) in `backlight_compensations_loc`.
+
+    + Body
+
+            {   
+                "separate_flows":false,
+                "gamma":[
+                    {
+                        "flow":"all",
+                        "mode":"automatic",
+                        "method":0,
+                        "smoothing_time":5,
+                        "contrast_level_maximal":52,
+                        "contrast_level_relative":25,
+                        "brightness_normalization":60,
+                        "backlight_compensation":3
+                    }
+                ]
+            }
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
++ Response 201 (application/json)
+
+    + Attributes (object)
+
+    + Body
+
+            {
+                "status": "params-corrected",
+                "separate_flows":false,
+                "gamma":[
+                    {
+                        "flow":"all",
+                        "mode":"automatic",
+                        "method":0,
+                        "smoothing_time":5,
+                        "contrast_level_maximal":52,
+                        "contrast_level_relative":25,
+                        "brightness_normalization":60,
+                        "backlight_compensation":3
+                    }
+                ]
+            }
+
+### Camera Adjust [/settings/camera/traffic]
+
+> ### Used in {__Traffic, Netcam__}
+
+#### +-Get camera settings [GET /settings/camera/traffic]
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + `exposition_us` (number) - exposition in microseconds, EQ zero if autoexposition is enabled.
+        + `exposition_us_range` (array[number]) - \[min,max\] value of `exposition_us` for \[PUT\].
+        + `flash_pulse_us` (number) - maximal flash pulse duration in microseconds.
+        + `flash_pulse_us_range` (array[number]) - \[min,max\] value of `flash_pulse_us` for \[PUT\].
+
+    + Body
+
+            {
+                "exposition_us": 1000,
+                "exposition_us_range": [50, 2000],
+                "flash_pulse_us": 400,
+                "flash_pulse_us_range": [300, 3000],
+                "status": "no-error"
+            }
+
+#### +-Update camera settings [PUT]
+
++ Request (application/json)
+
+    + Body
+
+            {
+                "exposition_us": 20,
+                "flash_pulse_us": 4
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "exposition_us": 2000,
+                "flash_pulse_us": 1000,
+                "status": "no-error"
+            }
+
++ Response 201 (application/json)
+
+    + Body
+
+            {
+                "exposition_us": 50,
+                "flash_pulse_us": 300,
+                "status": "params-corrected"
+            }
+
+#### +-Adjust lens settings [PUT /settings/camera/lens]
+
++ Request (application/json)
+
+    + Attributes
+
+        + `focus_adj` (number,optional) - Integer in steps to adjust lens focus.
+        + `zoom_adj`  (number,optional) - Integer in steps to adjust lens zoom.
+        + `iris_adj`  (number,optional) - Integer in steps to adjust lens motorised iris.
+
+    + Body
+
+            {
+                "focus_adj": 20,
+                "zoom_adj": -2
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
++ Response 201 (application/json)
+
+    + Body
+
+            {
+                "focus_adj": 100,
+                "zoom_adj": -100,
+                "status": "params-corrected"
+            }
+#### -Get Camera Streams Caps [GET /settings/camera/stream]
+
++ Response 200 (application/json)
+
+
+    + Attributes
+
+        + `streams` (array) - Data stream type and attributes
+            + (object)
+                + `encoding` (array[enum]) 
+                    + Members
+                        + `mjpeg` (string) - JPEG frames via HTTP multipart/x-mixed-replace content.
+                        + `jpeg`  (string) - Single JPEG frame via HTTP image content.
+                        + `h264`  (string) - H264 frames via HTTP multipart/x-mixed-replace content.
+                        + `h265`  (string) - H265 frames via HTTP multipart/x-mixed-replace content.
+                        + `raw`   (string) - RAW frames N/A for WEB UIs.
+                + `meta_avl` (array[enum]) 
+                    + Members
+                        + `none` (string)  - do not embedd any meta in image data.
+                        + `gps` (string)  - embed GPS time meta in image data.
+                        + `plates` (string)  - embed plates meta in image data.
+                        + `faces` (string)  - embed faces meta in image data.
+
+                + `period_us` (number) - minimal frames period. Real period can be less due to network limits or sensor mode limits.
+                + `dimensions` (string) - stream width and heigth in fmt "WxH".
+
+    + Body
+
+            {
+                "status": "no-error"
+                "streams": [
+                    {
+                        "encoding":["mjpeg","jpeg"],
+                        "meta_avl":["gps","faces"],
+                        "period_us":10000,
+                        "dimensions":"2048x1522"
+                    },
+                    {
+                        "encoding":"raw",
+                        "meta_avl":["none"],
+                        "period_us":10000,
+                        "dimensions":"2048x1522"
+                    },
+                ]
+            }
+
+#### +Open Camera Stream [POST /settings/camera/stream]
+
++ Request (application/json)
+
+    + Attributes
+
+        + `base_url` (string,optional) - Base URL used to acces JSON API by client, required in complex cases, when "Host:" HTTP header misleding.
+        + `stream_type` (array[enum]) - Data stream type and attributes, first idx from  `encoding` others from `meta_avl`
+            + Members
+                + `mjpeg`  (string)  - JPEG frames via HTTP MULTIPART content.
+                + `jpeg`   (string)  - Single JPEG frame.
+                + `gps`    (string)  - embed GPS time meta in image data.
+                + `plates` (string)  - embed plates meta in image data.
+
+        + `stream_min_period_us` (number,optional) - minimal frames period. Real period can be less due to network limits or sensor mode limits.
+
+    + Body
+
+            {
+                "base_url": "http://217.67.177.50:40084",
+                "stream_type": ["mjpeg","gps"],
+                "stream_min_period_us": 10000
+            }
+
++ Response 200 (application/json)
+
+    + Attributes
+
+        + dimensions    (string,required) - Размеры изображения в потоке данных.
+
+    + Body
+
+            {
+                "stream_url": "http://stream.url",
+                "stream_type": ["mjpeg", "gps"],
+                "stream_min_period_us": 10000,
+                "dimensions":  "2048x1522",
+
+                "status": "no-error"
+            }
+
++ Response 501 (application/json)
+
+    + Body
+
+            {
+                "stream_type": ["mjpeg", "faces"],
+                "status": "Unsupported stream type"
+            }
+
+## Camera State and Statistic [/camera/stat]
+
+> ### Used in {__Netcam__, __Traffic__}
+
+### -Get Camera Stat [GET /camera/stat/av]
+
++ Request (application/json)
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + `active_video` (object) - Active video parameters
+            + `exposition` (number) - Last Exposition in usecs.
+            + `period_samples` (number) - Sensor Frames period in usecs.
+            + `period_sync` (number) - Sync sygnal period usecs.
+            + `period_out_min` (number) - Minimaly allowed period in usecs for output streams.
+            + `jpeg_size` (number) - Current jpeg_size in octets.
+            + `jpeg_size_max` (number) - Max jpeg_size allowed in octets.
+
+        + `sync_counters` (object) - Sync counters.
+            + `frames_counter` (number) - Frames counter with forward jumps allowed \(should be visualized in HEX to controll periodic sync\).
+            + `sync_periodic` (number) - Periodic Ext Sync received.
+            + `sync_forced` (number) - Globaly forced Ext Sync received.
+            + `sync_source` (enum[string]) - Synchronization source (localized).
+                + Members
+                    + `Internal`
+                    + `Input 1`
+                    + `Input 2`
+                    + `Input 3`
+                    + `GNSS1(Input 1)`
+                    + `GNSS2(Input 2)`
+                    
+        + `camera_control` (object) - Camera Control state and stats.
+            + `camera_sun_angle` (number) - The Angle between the Camera and the Sun on horizontal plane in degrees.
+            + `earth_sun_angle` (number) - The angle of the Earth plane to the Sun (sun altitude) angle in degrees.
+            + `illumination_index` (number) - Current illumination index.
+            + `autoexp_mode` (string) - Curernt automatic exposition mode (localized).
+            + `autoexp_mode_next` (string) - Possible automatic exposition mode (localized).
+            + `autoiris_state` (string) - Current autoiris state(localized).
+        + `camera_status` (object) - Camera device status.
+            + `uptime` (number) - uptime in seconds.
+            + `tsensors` (array[number]) - array of temperature sensors values in degrees centigrate.
+            + `humidity` (number) - humidity in percents.
+            + `accel_3d` (array[number]) - array of X, Y, Z values of the projections of the accelerations on the corresponding axes.
+            + `horizontal_roll` (number) - the slope of the axis of the camera horizon relative to the horizontal plane of the earth in degrees
+            + `elevation_tilt` (number) - the tilt of the camera optical axis with respect to horizontal plane in degrees
+        + `gamma_correction` (array,optional) - gamma correction data flows
+            + (object)
+                + `flow` (enum[string]) - gamma corrected flow name
+
+                    + Members
+                        + `JPEG` 
+                        + `RAW`
+                        + `H264/H265`
+
+                + `X` (array[number]) - input gamma values
+                + `Y` (array[number]) - output gamma values
+                + `X_bits` (number) - X axes max (sensor samples depth) bits.
+                + `Y_bits` (number) - Y axes max (samples depth after correction) bits.
+        + `histogramm` (array[number],optional) - The array of 128 bin histogramm values
+        + `histogramm_max` (number,optional) - Maximum histogramm column value. Required if field `histogramm` present.
+        
+    + Body
+
+            {
+                "status": "no-error",
+                "active_video": {
+                    "exposition": 1000,
+                    "period_samples": 40000,
+                    "period_sync": 20000,
+                    "period_out_min": 100000,
+                    "jpeg_size": 184865,
+                    "jpeg_size_max": 1000000
+                },
+                
+                "sync_counters": {
+                    "frames_counter": 65536,
+                    "sync_periodic": 61,
+                    "sync_forced": 3,
+                },
+
+                "cam_control": {
+                    "camera_sun_angle": 55.4,
+                    "earth_sun_angle": 50.6,
+                    "illumination_index": 455,
+                    "autoexp_mode": "ordinal",
+                    "autoexp_mode_next": "can switch to overillumination compensation mode",
+                    "autoiris_state": "level 128 <- 130"
+                },
+
+                "camera_status": {
+                    "uptime": 2305325,
+                    "tsensors": [55.53, 40.34, 39.23],
+                    "humidity": 12.5,
+                    "accel_3d": [-0.09,0.92,-0.15],
+                    "horizontal_roll": -5.20,
+                    "elevation_tilt": -9.43
+                },
+                "gamma_correction": [
+                    {
+                        "flow": "RAW",
+                        "X": [0, 50, 80, 1000, 4096],
+                        "Y": [0, 20, 40,  200,  256],
+                        "X_bits": 12,
+                        "Y_bits": 10
+                    },
+                    {
+                        "flow": "JPEG",
+                        "X": [0, 40, 80, 500, 1000, 4096],
+                        "Y": [0, 20, 40, 100,  200,  256],
+                        "X_bits": 12,
+                        "Y_bits": 10
+                    }
+                ],
+                "histogramm":[
+                     6054,16745,29488, 3874, 3853,19034,26535, 1731,
+                    10980,30897,25618, 3195, 2021,27467,16738,14594,
+                    15403,22413,28550,28965,22510,29115,24109,  903,
+                    19265,20584,31818, 7799,11480,18279,17968, 6694,
+                    29893,13177,25943,27660, 7835,29057,29158,24632,
+                    13189, 4572,12510,27795,12357, 6815,31117, 9921,
+                     1810,14134,20564,28135,30134,16108,  512,21781,
+                     4405,26177,22799, 9903,27090, 4007,19316,23624,
+                     9849,29202, 5512,20262, 1976,30535,22515,13417,
+                    23429, 9171, 2906,20289,26861,17829,2293, 10703,
+                    26332, 4619,17130,16218,21017, 3410,10482,15044,
+                    16846,27850,20363,15052,10037, 5563,20455,26026,
+                    11256,21428,20401,29628,20447,24567,23567,29920,
+                    18770,10491,  650,27681, 9678,13084, 7840,19089,
+                    31111, 8171,32171, 9231,22294, 7871,11493,11986,
+                    27861,20589,24153,25231,22773,24006,  191, 5521
+                ],
+                "histogramm_max":31117
+            }
+
+## Camera Synchronization [/camera/synchronization]
+
+> ### Used in {__Netcam__, __Traffic__}
+
+### -Get Camera Synchronization Profiles [GET /camera/synchronization/profile]
+
++ Request (application/json)
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+    
+        + `sync_profiles_loc` (array[string],required) - Synchronization Profiles names (localized).
+
+    + Body
+
+            {
+                "sync_profiles_loc": ["traffic", "indoor", "contour_overillumination", "outdoor", "synchro_shorts"]
+            }
+    
+### -Apply Camera Synchronization Profile [PUT /camera/synchronization/profile]
+
++ Request (application/json)
+
+
+    + Attributes (object)
+        + `sync_profile` (number,required) - Synchronization Profile idx from `sync_profiles_loc`.
+
+    + Body
+
+            {
+                "sync_profile": 0
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
+### -Get Camera Synchronization Settings [GET]
+
++ Request (application/json)
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + `sync_mode` (enum[string],required) - Synchronization mode.
+
+            + Members
+                + `priority_exposition` - Do not limit Exposition.
+                + `priority_period` - Do not Change period.
+                + `external_sync` - External Sync.
+        
+        + `ext_sync_ins` (array[string],required) - Possible Synchronization inputs for `external_sync` mode.
+        + `ext_sync_ins_loc` (array[string],required) - Possible Synchronization inputs for `external_sync` mode localized names.
+        + `ext_sync_in` (enum[string],required) - Synchronization input for `external_sync` mode.
+
+            + Members
+                + `in1` - input1.
+                + `in2` - input2.
+                + `in3` - input3.
+                + `gnss1_pps@in1` - input1 GNSS 1 pps.
+                + `gnss2_pps@in2` - input2 GNSS 1 pps.
+        
+        + `gnss` (object,required) - GNSS related settings.
+            + `period_list` (array[number]) - valid GNSS period list.
+            + `period` (number) - GNSS period in ms if used GNSS 1 pps as external sync input.
+            + `embedded` (boolean) - do embed GNSS info into images.
+            + `time_source` (boolean) - do use GNSS as time source for internal NTP server and system time.
+            
+        + `period` (number,required) - frames period in us, used if selected `priority_period` as `sync_mode`.
+        + `period_range` (number,required) - MIN frames period range \[Min, Max\] in us.
+
+        
+        + `ins` (array) -  array of input configs.
+            + (object)
+                + `id` (enum) input id. See `ext_sync_in`  description.
+                + `active_lvl` (enum[string],required) - Active level
+
+                    + Members
+                        + `positive` Active positive level
+                        + `negative` Active negative level
+                    
+                + `pulse_min_threshold` (number) - Minimal pulse duration in usecs.
+                + `pulse_min_threshold_range` (number) - MIN Minimal pulse duration in usecs range \[Min, Max\].
+
+                + `delay_on`  (number) - Delay of start signal in usecs, can be rounded to possible granularity.
+                + `delay_on_range`  (number) - MIN Delay of start signal range \[Min, Max\] in usecs.
+
+                + `delay_off` (number) - Delay of stop signal in usecs, can be rounded to possible granularity.
+                + `delay_off_range` (number) - MIN Delay of stop signal range \[Min, Max\] in usecs.
+            
+        + `outs_modes_loc` (array[string],required) outputs operational modes (localized).
+        + `outs` (array,required) - Array of outputs configuration.
+            + (object)
+                + `id`  (string) - Out id RO.
+                + `name` (string) - Out user defined name
+                + `mode` (enum[number]) - Out operational mode idx from zero in `outs_modes_loc` array.
+
+                    + Members
+                        + 0 - `permanent` Permanent output selected by `polarity` level.
+                        + 1 - `on-demand` By external SW event.
+                        + 2 - `generator` By pulses generator.
+                        + 3 - `exposition-start` Pulse every exposition start `(by VSYNC)`.
+
+                + `polarity` (enum[string]) - Output polarity
+
+                    + Members
+                        + `positive` - Active positive level
+                        + `negative` - Active negative level
+
+                + `duration` (number) - Sygnal duration in usecs, can be rounded to possible granularity.
+                + `duration_range` (number) - MIN Sygnal duration range \[Min, Max\] in usecs.
+                
+        + `generator_period` (number, optional) - Period of internal generator, required if any of outs do use `generator` as `mode`
+        + `generator_period_range` (number, optional) - Period of internal generator range \[Min, Max\] in usecs.
+
+    + Body
+
+            {
+                "status": "no-error",
+                "sync_mode": "external_sync",
+                "period_min":
+                "ext_sync_ins": ["in1", "in2", "in3", "gnss1_pps@in1", "gnss2_pps@in2"],
+                "ext_sync_ins_loc": ["Input 1", "Input 2", "Input 3", "GNSS1(Input 1)", "GNSS2(Input 2)"],
+                "ext_sync_in": "gnss_pps@in1",
+                "gnss":{
+                    "periods": [250, 200, 125, 100, 80, 75, 64, 60, 50, 40, 25, 20],
+                    "gnss_period": 50,
+                    "embedded":true,
+                    "time_source":true
+                },
+
+                "ins": [
+                    {
+                        "id":"gnss1_pps@in1",
+                        "name":"GPS",
+                        "polarity":"positive",
+                        "pulse_min_threshold": 0,
+                        "pulse_min_threshold_range":[0, 1023],
+                        "dealy_on":0,
+                        "dealy_on_range":[0, 127000],
+                        "delay_off":0,
+                        "delay_off_range":[0, 127000]
+                    },
+                    {
+                        "id":"gnss2_pps@in2",
+                        "name":"GPS",
+                        "polarity":"positive",
+                        "pulse_min_threshold": 0,
+                        "pulse_min_threshold_range":[0, 1023],
+                        "dealy_on":0,
+                        "dealy_on_range":[0, 127000],
+                        "delay_off":0,
+                        "delay_off_range":[0, 127000]
+                    },
+                    {
+                        "id":"in1",
+                        "name":"Ext Sync A",
+                        "polarity":"positive",
+                        "pulse_min_threshold": 2,
+                        "pulse_min_threshold_range":[0, 1023],
+                        "dealy_on":10,
+                        "dealy_on_range":[0, 127000],
+                        "delay_off":10,
+                        "delay_off_range":[0, 127000]
+                    },
+                    {
+                        "id":"in2",
+                        "name":"Ext Sync B",
+                        "polarity":"positive",
+                        "pulse_min_threshold": 2,
+                        "pulse_min_threshold_range":[0, 1023],
+                        "dealy_on":10,
+                        "dealy_on_range":[0, 127000],
+                        "delay_off":10,
+                        "delay_off_range":[0, 127000]
+                    },
+                    {
+                        "id":"in3",
+                        "name":"Ext Sync C",
+                        "polarity":"positive",
+                        "pulse_min_threshold": 2,
+                        "pulse_min_threshold_range":[0, 1023],
+                        "dealy_on":10,
+                        "dealy_on_range":[0, 127000],
+                        "delay_off":10,
+                        "delay_off_range":[0, 127000]
+                    }
+                ],
+                "outs_modes_loc": ["permanent", "on-demand", "generator", "exposition-start"],
+                "outs": [
+                    {
+                        "id":0,
+                        "name":"Прожектор 1",
+                        "mode":3,
+                        "polarity":"positive",
+                        "duration": 400,
+                        "duration_range":[0, 163830]
+                    },
+                    {
+                        "id":1,
+                        "name":"GPS Power",
+                        "mode":0,
+                        "polarity":"positive",
+                        "duration": 400,
+                        "duration_range":[0, 163830]
+                    },
+                    {
+                        "id":2,
+                        "name":"Прожектор 2",
+                        "mode":3,
+                        "polarity":"positive",
+                        "duration": 400,
+                        "duration_range":[0, 163830]
+                    }
+
+                ],
+                "generator_period": 40000,
+                "generator_period_range":[100, 12700000],
+            }
+
+### -Apply Camera Synchronization Settings [PUT]
+
++ Request (application/json)
+
+
+    + Attributes (object)
+        + `sync_mode` (enum[string],required) - Synchronization mode.
+
+            + Members
+                + `priority_exposition` - Do not limit Exposition.
+                + `priority_period` - Do not Change period.
+                + `external_sync` - External Sync.
+        
+        + `ext_sync_in` (enum[string],required) - Synchronization input for `external_sync` mode.
+
+            + Members
+                + `in1` - input1.
+                + `in2` - input2.
+                + `in3` - input3.
+                + `gnss1_pps@in1` - input1 GNSS 1 pps.
+                + `gnss2_pps@in2` - input2 GNSS 2 pps.
+        
+        + `gnss` (object,required) - GNSS related settings.
+            + `period` (number) - GNSS period in ms if used GNSS 1 pps as external sync input.
+            + `embedded` (boolean) - do embed GNSS info into images.
+            + `time_source` (boolean) - do use GNSS as time source for internal NTP server and system time.
+            
+        + `period` (number,required) - frames period in us, used if selected `priority_period` as `sync_mode`.
+
+        + `ins` (array) - array of input configs.
+            + (object)
+                + `id` (enum) input id. See `ext_sync_in`  description.
+                + `active_lvl` (enum[string],required) - Active level
+
+                    + Members
+                        + `positive` Active positive level
+                        + `negative` Active negative level
+                    
+                + `pulse_min_threshold` (number) - Minimal pulse duration in usecs.
+                + `delay_on`  (number) - Delay of start signal in usecs, can be rounded to possible granularity.
+                + `delay_off` (number) - Delay of stop signal in usecs, can be rounded to possible granularity.
+
+        + `outs` (array,required) - Array of outputs configuration.
+            + (object)
+                + `id`  (string) - Out id RO.
+                + `name` (string) - Out user defined name
+                + `mode` (enum[number]) - Out operational mode idx from zero in `outs_modes_loc`
+
+                    + Members
+                        + 0 - `permanent` Permanent output selected by `polarity` level.
+                        + 1 - `on-demand` By external SW event.
+                        + 2 - `generator` By puses generator.
+                        + 3 - `exposition-start` Pulse every exposition start `(by VSYNC)`.
+
+                + `polarity` (enum[string]) - Output polarity
+
+                    + Members
+                        + `positive` - Active positive level
+                        + `negative` - Active negative level
+
+                + `duration` (number) - Signal duration in usecs, can be rounded to possible granularity(7bit mantisa).
+
+        + `generator_period` (number, optional) - Period of internal generator, required if amy of outs do use `generator` as `mode`
+
+    + Body
+
+            {
+                "sync_mode": "external_sync",
+                "period_min":
+                "ext_sync_in": "gnss1_pps@in1",
+                "gnss":{
+                    "gnss_period": 50,
+                    "embedded":true,
+                    "time_source":true
+                },
+
+                "ins": [
+                    {
+                        "id":"gnss_pps@in1",
+                        "name":"GPS",
+                        "polarity":"positive",
+                        "pulse_min_threshold": 0,
+                        "dealy_on":0,
+                        "delay_off":0,
+                    },
+                    {
+                        "id":"gnss2_pps@in2",
+                        "name":"GPS",
+                        "polarity":"positive",
+                        "pulse_min_threshold": 0,
+                        "dealy_on":0,
+                        "delay_off":0,
+                    },
+                    {
+                        "id":"in1",
+                        "name":"Ext Sync A",
+                        "polarity":"positive",
+                        "pulse_min_threshold": 2,
+                        "dealy_on":10,
+                        "delay_off":10,
+                    },
+                    {
+                        "id":"in2",
+                        "name":"Ext Sync B",
+                        "polarity":"positive",
+                        "pulse_min_threshold": 2,
+                        "dealy_on":10,
+                        "delay_off":10,
+                    },
+                    {
+                        "id":"in3",
+                        "name":"Ext Sync C",
+                        "polarity":"positive",
+                        "pulse_min_threshold": 2,
+                        "dealy_on":10,
+                        "delay_off":10,
+                    }
+                ]
+                "outs": [
+                    {
+                        "id":0,
+                        "name":"Прожектор 1",
+                        "mode":3,
+                        "polarity":"positive",
+                        "duration": 400,
+                    },
+                    {
+                        "id":1,
+                        "name":"GPS Power",
+                        "mode":0,
+                        "polarity":"positive",
+                        "duration": 400,
+                    },
+                    {
+                        "id":2,
+                        "name":"Прожектор 2",
+                        "mode":3,
+                        "polarity":"positive",
+                        "duration": 400,
+                    }
+
+                ],
+                "generator_period": 40000,
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
++ Response 201 (application/json)
+
+    + Body
+
+            {
+                "status": "params-corrected"
+            }
+
+## Camera Image [/camera/image]
+
+> ### Used in {__Netcam__, __Traffic__}
+
+### -Get Image Settings [GET]
+
++ Request (application/json)
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        `rotate` (enum[number]) - Image rotation settings.
+
+            + Members
+                + `0`   - Do not rotate
+                + `180` - Do rotate 180 degrees.
+
+        `mirror` (enum[string]) - Image Mirror settings.
+            
+            + Members
+                + `no`          - Do not mirror Image.
+                + `vertical`    - Do vertical mirror of Image.
+                
+        `rois` (array[object]) - The array of Region Of Interest params.
+            `name` (enum[string]) - ROI name.
+                + Members
+                    `sensor` - Sensor Dims including Buffer and Black pixels (RO required field).
+                    `AV` - Active video (Only Active video Sensor pixels) (RO required field).
+                    `RAW` - Data passed to RAW stream (for data processing)
+                    `JPEG` - Data passed to JPEG stream encoder.
+                    `H26x` - Data passed to H264/H265 encoder.
+                    `EXP` - Data passed to histogram estimator.
+
+            `use` (enum[string],optional) - Use ROI settings from other named ROI. Final destination (last in the use chain) ROI must use `rect` field for ROI spec.
+                + Members
+                    `sensor` - Sensor Dims including Buffer and Black pixels (RO field).
+                    `AV` - Active video (Only Active video Sensor pixels) (RO field).
+                    `RAW` - Data passed to RAW stream (for data processing)
+                    `JPEG` - Data passed to JPEG stream encoder.
+                    `H26x` - Data passed to H264/H265 encoder.
+                    
+            `rect` (array[number]) - `[Xlt], [Ylt], (Xrb), (Yrb)` coordinate of left top corner of ROI (inclusive) and right bottom corner of ROI (non inclusive).
+                
+    + Body
+
+            {
+                "status": "no-error",
+                "rotate": 180,
+                "mirror": "vertical",
+                "rois": [
+                    {
+                        "id": "sensor",
+                        "rect": [0, 0, 2012, 1552]
+                    },
+                    {
+                        "id": "AV",
+                        "rect": [16, 16, 1996, 1536]
+                    },
+                    {
+                        "id": "RAW",
+                        "use": "AV"
+                    },
+                    {
+                        "id": "JPEG",
+                        "use": "RAW"
+                    },
+                    {
+                        "id": "EXP",
+                        "rect": [16, 16, 400, 800]
+                    }
+                ]
+            }
+
+### -Set Image Settings [PUT]
+
++ Request (application/json)
+
+    + Attributes (object)
+        `rotate` (enum[number]) - Image rotation settings.
+
+            + Members
+                + `0`   - Do not rotate
+                + `180` - Do rotate 180 degrees.
+
+        `mirror` (enum[string]) - Image Mirror settings.
+            
+            + Members
+                + `no`          - Do not mirror Image.
+                + `vertical`    - Do vertical mirror of Image.
+                
+        `rois` (array[object]) - The array of Region Of Interest params to be updated. All missed ROIs will not be changed.
+            `name` (enum[string]) - ROI name.
+                + Members
+                    `RAW` - Data passed to RAW stream (for data processing)
+                    `JPEG` - Data passed to JPEG stream encoder.
+                    `H26x` - Data passed to H264/H265 encoder.
+                    `EXP` - Data passed to histogram estimator.
+
+            `use` (enum[string],optional) - Use ROI settings from other named ROI. Final destination (last in the use chain) ROI must use `rect` field for ROI spec.
+                + Members
+                    `sensor` - Sensor Dims including Buffer and Black pixels.
+                    `AV` - Active video (Only Active video Sensor pixels).
+                    `RAW` - Data passed to RAW stream (for data processing)
+                    `JPEG` - Data passed to JPEG stream encoder.
+                    `H26x` - Data passed to H264/H265 encoder.
+                    
+            `rect` (array[number]) - `[Xlt], [Ylt], (Xrb), (Yrb)` coordinate of left top corner of ROI (inclusive) and right bottom corner of ROI (non inclusive).
+
+    + Body
+
+            {
+                "rotate": 180,
+                "mirror": "vertical",
+                "rois": [
+                    {
+                        "id": "RAW",
+                        "use": "AV"
+                    },
+                    {
+                        "id": "JPEG",
+                        "use": "RAW"
+                    },
+                    {
+                        "id": "EXP",
+                        "rect": [16, 16, 400, 800]
+                    }
+                ]
+            }
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+    + Body
+
+            {
+                "status": "no-error",
+            }
+
+
+
+## Camera Video [/camera/video]
+
+> ### Used in {__Netcam__, __Traffic__}
+
+### -Get Video Settings [GET]
+
++ Request (application/json)
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + `flows` (array) - The array of flows settings.
+            + (object)
+                + `name` (enum[string]) - Flow name or decimation target.
+                    + Members
+                        + `all` - All streams
+                        + `RAW` - Data passed to RAW stream (for data processing)
+                        + `JPEG` - Data passed to JPEG stream encoder.
+                        + `H26x` - Data passed to H264/H265 encoder.
+
+                + `min_period` (number) - Minimal allowed period in 100ns units. Used if `name` exist in `decimation_flows` field.
+                + `enable_decimation` (boolean) - Enable decimation. Used if `name` exist in `decimation_flows` field.
+                + `quality` (number) - compression quality level. Applicable only for `H26x`/`JPEG` flow.
+                + `quality_range` (number) - \[min,max\] compression quality level. Applicable only for `H26x`/`JPEG` flow.
+                + `bitrate` (number) - target bits per second. Applicable only for `H26x` flow.
+                + `bitrate_range` (number) -  \[min,max\] target bits per second. Applicable only for `H26x` flow.
+                + `sample_bits_list` (array[number]) - allowed sample bits per pixel for RAW flow
+                + `sample_bits` (number) - bits per pixel of raw image. Applicable only for `RAW` flow.
+        + `period` (number) frame samples period from sensor in 100ns units.
+
+    + Body
+
+            {
+                "status": "no-error",
+                "flows":[
+                    {
+                        "name": "all"
+                        "enable_decimation": true,
+                        "min_period": 1000000
+                    },
+                    {
+                        "name": "RAW",
+                        "sample_bits_list":[8,10,12,16],
+                        "sample_bits":8
+                    },
+                    {
+                        "name": "JPEG"
+                        "quality_range":[0,99]
+                        "quality":10,
+                    }
+                ],
+                
+                "period":800000
+            }
+
+
+### -Set Video Settings [PUT]
+
++ Request (application/json)
+
+    + Attributes (object)
+
+        + `flows` (array) - The array of flows settings.
+            + (object)
+                + `name` (enum[string]) - Flow name or decimation target.
+                + `min_period` (number) - Minimal allowed period in 100ns units. Used if `name` exist in `decimation_flows` field.
+                + `enable_decimation` (boolean) - Enable decimation. Used if `name` exist in `decimation_flows` field.
+                + `quality` (number) - compression quality level.  Applicable only for `H26x`/`JPEG` flow.
+                + `bitrate` (number) - target bits per second. Applicable only for `H26x` flow.
+                + `sample_bits` (number) - bits per pixel of raw image. Applicable only for `RAW` flow.
+
+    + Body
+
+            {
+                "flows":[
+                    {
+                        "name": "all"
+                        "enable_decimation": false,
+                        "min_period": 1000000
+                    },
+                    {
+                        "name": "JPEG"
+                        "quality": 75
+                    },
+                    {
+                        "name": "RAW"
+                        "sample_bits": 12
+                    },
+                ]
+            }
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+    + Body
+
+            {
+                "status": "no-error",
+            }
+
++ Response 201 (application/json)
+
+    + Attributes (object)
+
+    + Body
+
+            {
+                "status": "params-corrected",
+                "flows":[
+                    {
+                        "name": "all"
+                        "enable_decimation": false,
+                        "min_period": 1000000
+                    },
+                    {
+                        "name": "JPEG"
+                        "quality": 75
+                    },
+                    {
+                        "name": "RAW"
+                        "sample_bits": 8
+                    },
+                ]
+            
+            }
+
+
+## Factory Presets Sensor [/settings/presets]
+
+> ### Used in {__Netcam__, __Traffic__}
+
+### -Get Sensor Presets [GET /settings/presets/sensor]
+
++ Request (application/json)
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + `names` (array[string]) - List of supported sensors libraries.
+        + `name` (enum[string]) - Sensor library name.
+        + `resolution` (array[number]) - Sensor RAW \[width,Height\].
+        + `is_colour` (boolean) -
+        + `bayer_scheme` (enum[string]) -
+            + Members
+                + `RGGB`
+                + `GRBG`
+                + `BGGR`
+                + `GBRG`
+        + `pixel_size` (number) pixel size in microns.
+        + `sample_bits` (number) bits per sensor sample.
+        + `frame_readout` (number) frame read time in us.
+        + `frame_min_period` (number) frame read time plus minimal interframe gap in us.
+
+    + Body
+
+            {
+                "names":["KAI4050ABA", "ICX687R2"],
+                "name":"ICX687R2",
+                "resolution":[1932,1452],
+                "is_colour":false,
+                "pixel_size":3.69,
+                "sample_bits":8,
+                "frame_readout":39000,
+                "frame_min_period":40000
+            }
+
+### -Set Sensor Presets [PUT /settings/presets/sensor]
+
++ Request (application/json)
+
+    + Attributes (object)
+
+        + `name` (enum[string]) - Sensor library name.
+        + `is_colour` (boolean) -
+        + `bayer_scheme` (enum[string]) -
+            + Members
+                + `RGGB`
+                + `GRBG`
+                + `BGGR`
+                + `GBRG`
+
+    + Body
+
+            {
+                "name":"ICX687R2",
+                "is_colour":true,
+                "bayer_scheme":"RGGB"
+            }
+    
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+    
++ Response 201 (application/json)
+
+    + Attributes (object)
+
+    + Body
+
+            {
+                "status": "params-corrected"
+                "name":"ICX687R2",
+                "is_colour":true,
+                "bayer_scheme":"GRBG"
+            }
+
+## Factory Presets Box [/settings/presets/box]
+
+> ### Used in {__Netcam__, __Traffic__}
+
+### -Get Box Presets [GET]
+
++ Request (application/json)
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + `devices_caps` (array) - List of supported devices and their capabilities.
+            + (object)
+                + `name` (string) - Device name.
+                + `present` (boolean,optional) - Device is present permanently inside box. False if field absent.
+                + `power_managed` (boolean,optional) - Can be powered on off? False if field absent.
+                + `thermal_limit` (boolean,optional) - Should be termal limited? False if field absent.
+
+        + `devices` (array) - List of supported devices.
+            + (object)
+                + `name` (string) - Device name.
+                + `present` (boolean) - Is device present inside box.
+                + `power_on` (boolean,optional) - Power state. Required if field `power_managed` is true.
+
+    + Body
+
+            {
+                "status": "no-error",
+                "devices_caps":[
+                    {
+                        "name":"GNSS1",
+                        "power_managed":true,
+                    },
+                    {
+                        "name":"GNSS2",
+                        "power_managed":false,
+                    },
+                    {
+                        "name":"RADAR",
+                        "power_managed":true,
+                    },
+                    {
+                        "name":"Spotlight",
+                        "present":true,
+                        "power_managed":false,
+                        "thermal_limit":true
+                    }
+
+                ],
+                "devices":[
+                    {
+                        "name":"GNSS1",
+                        "present":true,
+                        "power_on":true,
+                    },
+                    {
+                        "name":"GNSS2",
+                        "present":false,
+                    },
+                    {
+                        "name":"RADAR",
+                        "present":false,
+                    }
+                ]
+            }
+
+### -Set Box Presets [PUT]
+
++ Request (application/json)
+
+    + Attributes (object)
+
+        + `devices` (array) - List of supported devices.
+            + (object)
+                + `name` (string) - Device name.
+                + `present` (boolean) - Is device present inside box.
+                + `power_on` (boolean,optional) - Power state. required if field `power_managed` is true.
+                + `termal_control` (boolean,optional) - limit power consumption. required if field `termal_limit` is true.
+
+    + Body
+
+            {
+                "devices":[
+                    {
+                        "name":"GNSS1",
+                        "present":true,
+                        "power_on":true,
+                    },
+                    {
+                        "name":"GNSS2",
+                        "present":false,
+                    },
+                    {
+                        "name":"RADAR",
+                        "present":true,
+                        "power_on":true,
+                    },
+                    {
+                        "name":"Spotlight",
+                        "present":true,
+                        "power_on":true,
+                    }
+                ]
+            }
+    
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+    
+## Factory Presets Logs [/settings/presets/logs]
+
+> ### Used in {__Netcam__, __Traffic__}
+
+### -Get Logs Presets [GET]
+
++ Request (application/json)
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + `logs` (array) - List of supported subsystems.
+            + (object) 
+                + `name` (enum[string]) - Subsystem name.
+                + `level` (enum[string]) -
+                    + Members
+                        + `off`
+                        + `minimal`
+                        + `extended`
+                        + `maximal`
+
+    + Body
+
+            {
+                "status": "no-error",
+                "logs":[
+                    {
+                        "name":"camctrl",
+                        "level":"off"
+                    },
+                    {
+                        "name":"traffic-analizer",
+                        "level":"extended"
+                    },
+                    {
+                        "name":"traffic-proxy",
+                        "level":"minimal"
+                    }
+                ]
+            }
+
+### -Set Logs Presets [PUT]
+
++ Request (application/json)
+
+    + Attributes (object)
+
+        + `logs` (array) - List of supported subsystems.
+            + (object) 
+                + `name` (enum[string]) - Subsystem name.
+                + `level` (enum[string]) -
+                    + Members
+                        + `off`
+                        + `minimal`
+                        + `extended`
+                        + `maximal`
+
+    + Body
+
+            {
+                "logs":[
+                    {
+                        "name":"camctrl",
+                        "level":"off"
+                    },
+                    {
+                        "name":"traffic-analizer",
+                        "level":"off"
+                    },
+                    {
+                        "name":"traffic-proxy",
+                        "level":"off"
+                    }
+                ]
+            }
+    
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
+
+## Factory Presets Lens [/settings/presets/lens]
+
+> ### Used in {__Netcam__, __Traffic__}
+
+### -Get Lens Profiles [GET /settings/presets/lens/profiles]
+
++ Request (application/json)
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + profiles (array) - Array of profile objects
+            + (object) - profile object
+                + `name` (string)
+                + `description` (string)
+                + `iris_mode` (enum[string]) - iris control mode.
+                + `iris_p_iris` (object,optional) - P-IRIS params, required when `iris_mode` EQ `p_iris`
+                    + `pulse_width_initial` (number) - in us
+                    + `pulse_width_control` (number) - in us
+                    + `iris_steps` (number) - iris total steps count.
+                    + `phase_modulation_type` (enum[string]) - type of phase modulation.
+
+                + `iris_motor` (object,optional) - Motorised IRIS params, required when `iris_mode` EQ `motor`
+                    + `speed_range` (array[number]) - \[Min, Max\] iris motor speed
+
+                + `iris_number_range` (array[number]) - \[Min, Max\] iris in F numbers (Min when CLOSED, Max when maximum OPENED)
+                + `zoom_mode` (enum[string]) - zoom control mode.
+                + `zoom_motor` (object,optional) - Motorised ZOOM params, required when `zoom_mode` EQ `motor`
+                    + `speed_range` (array[number]) - \[Min, Max\] zoom motor speed
+
+                + `focus_mode` (enum[string]) - focus control mode.
+
+                + `focus_motor` (object,optional) - Motorised Focus params, required when `focus_mode` EQ `motor`
+                    + `speed_range` (array[number]) - \[Min, Max\] focus motor speed
+                    
+                + `focal_length_range` (array[number],optional) -  \[Min, Max\] focal length in mm, required for non fixed ZOOM lens.
+                + `focal_length` (number,optional) - minimal focal length in mm, required for fixed ZOOM lens.
+
+    + Body
+
+            {
+                "status": "no-error",
+                "profiles": [
+                    {
+                        "name": "Tamron M118VP1250IR",
+                        "description:": "f=50mm,F1.8-F16",
+                        "iris_mode": "p-iris",
+                        "iris_p-iris": {
+                            "pulse_width_initial": 2000,
+                            "pulse_width_control": 2000,
+                            "iris_steps": 76,
+                            "phase_modulation_type": "8-phase"
+                        },
+                        
+                        "iris_number_range":[16.0, 1.8],
+                    
+                        "zoom_mode": "fixed",
+
+                        "focus_mode": "motor",
+                        "focus_motor": {
+                            "speed_range":[128,160]
+                        },
+                        
+                        "focal_length": 50
+                    },
+                    {
+                        "name": "Theya SL1250P",
+                        "description:": "f=12-50mm,F1.8-F16",
+                        "iris_mode": "p-iris",
+                        "iris_p-iris": {
+                            "pulse_width_initial": 2000,
+                            "pulse_width_control": 2000,
+                            "iris_steps": 86,
+                            "phase_modulation_type": "4-phase"
+                        },
+                        
+                        "iris_number_range": [16.0, 1.8],
+                    
+                        "zoom_mode": "motor",
+                        "zoom_motor": {
+                            "speed_range":[128,160]
+                        },
+                        
+                        "focus_mode": "motor",
+                        "focus_motor": {
+                            "speed_range":[128,160]
+                        },
+                        
+                        "focal_length_range":[12, 50]
+                    },
+                ],
+            }
+
+### -Get Lens Presets [GET /settings/presets/lens/current]
+
++ Request (application/json)
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+
+        + `iris_modes` (array[string]) - Array of supportrd iris control modes for manual profile adjust.
+            + Members
+                + `fixed` (string) - fixed iris.
+                + `manual` (string) - iris can be manualy adjusted.
+                + `p_iris` (string) - P-IRIS adj type.
+                + `dc_iris` (string) - DC-IRIS adj type.
+                + `motor` (string) - motorised iris.
+                + `i2c_ics` (string) - ICS i2c protocol for adj. ???
+
+        + `iris_phase_modulation_types` (array[string]) - Array of supportrd iris phase modulation types.
+            + Members
+                + `4-phases` (string) - 4 phases states modulation.
+                + `8-phases` (string) - 8 phases states modulation.
+        
+        + `zoom_modes` (array[string]) - Array of supportrd zoom control modes for manual profile.
+            + Members
+                + `fixed` (string) - fixed zoom.
+                + `manual` (string) - zoom can be manualy adjusted.
+                + `motor` (string) - motorised zoom.
+                + `i2c_ics` (string) - ICS i2c protocol for zoom adj. ???
+
+        + `focus_modes` (array[string]) - Array of supportrd focus control modes for manual profile.
+            + Members
+                + `fixed` (string) - fixed focus.
+                + `manual` (string) - focus can be manualy adjusted.
+                + `motor` (string) - motorised focus.
+                + `i2c_ics` (string) - ICS i2c protocol for focus adj. ???
+
+        + `lens` (object) - lens params
+            + `name` (string) - lens model
+            + `description` (string) - lens details
+            + `iris_mode` (enum[string]) - iris control mode, one selected from `zoom_modes`
+            + `iris_p_iris` (object,optional) - P-IRIS params, required when `iris_mode` EQ `p_iris`
+                + `pulse_width_initial` (number) - in us
+                + `pulse_width_control` (number) - in us
+                + `iris_steps` (number) - iris total steps count.
+                + `phase_modulation_type` (enum[string]) - type of phase modulation.
+                + `calibration_status` (string) - Current P-IRIS state description.
+
+            + `iris_motor` (object,optional) - Motorised IRIS params, required when `iris_mode` EQ `motor`
+                + `speed_range` (array[number]) - \[Min, Max\] iris motor speed
+
+            + `iris_number_range` (array[number]) - \[Min, Max\] iris in F numbers (Min when CLOSED, Max when maximum OPENED)
+            
+            + `zoom_mode` (enum[string]) - zoom control mode.
+            + `zoom_motor` (object,optional) - Motorised ZOOM params, required when `zoom_mode` EQ `motor`
+                + `speed_range` (array[number]) - \[Min, Max\] zoom motor speed
+
+            + `focus_mode` (enum[string]) - focus control mode.
+
+            + `focus_motor` (object,optional) - Motorised Focus params, required when `focus_mode` EQ `motor`
+                + `speed_range` (array[number]) - \[Min, Max\] focus motor speed
+                    
+            + `focal_length_range` (array[number],optional) -  \[Min, Max\] focal length in mm, required for non fixed ZOOM lens.
+            + `focal_length` (number,optional) - minimal focal length in mm, required for fixed ZOOM lens.
+
+    + Body
+
+            {
+                "status": "no-error",
+
+                "iris_modes": ["fixed", "manual", "p_iris", "dc_iris", "motor", "i2c_ics"],
+                "iris_phase_modulation_types": ["4-phases", "8-phases"],
+                "zoom_modes": ["fixed", "manual", "motor", "i2c_ics"],
+                "focus_modes":["fixed", "manual", "motor", "i2c_ics"],
+                
+                "lens": {
+                    "name": "Theya SL1250P",
+                    "description:": "f=12-50mm,F1.8-F16",
+                    "iris_mode": "p-iris",
+                    "iris_p-iris": {
+                        "calibration_status": "calibration 95%",
+                        "pulse_width_initial": 2000,
+                        "pulse_width_control": 2000,
+                        "iris_steps": 86,
+                        "phase_modulation_type": "4-phase"
+                    },
+                    
+                    "iris_number_range": [16.0, 1.8],
+                    
+                    "zoom_mode": "motor",
+                    "zoom_motor": {
+                        "speed_range":[128,160]
+                    },
+                        
+                    "focus_mode": "motor",
+                    "focus_motor": {
+                        "speed_range":[128,160]
+                    },
+                        
+                    "focal_length_range":[12, 50]
+                }
+            }
+
+### -Set Lens Presets [PUT /settings/presets/lens/current]
+
++ Request (application/json)
+
+    + Attributes (object)
+
+        + `lens` (object,optional) - lens params
+            + `name` (string) - lens model
+            + `description` (string) - lens details
+            + `iris_mode` (enum[string]) - iris control mode, one selected from `zoom_modes`
+            + `iris_p_iris` (object,optional) - P-IRIS params, required when `iris_mode` EQ `p_iris`
+                + `pulse_width_initial` (number) - in us
+                + `pulse_width_control` (number) - in us
+                + `iris_steps` (number) - iris total steps count.
+                + `phase_modulation_type` (enum[string]) - type of phase modulation.
+
+            + `iris_motor` (object,optional) - Motorised IRIS params, required when `iris_mode` EQ `motor`
+                + `speed_range` (array[number]) - \[Min, Max\] iris motor speed
+
+            + `iris_number_range` (array[number]) - \[Min, Max\] iris in F numbers (Min when CLOSED, Max when maximum OPENED)
+            
+            + `zoom_mode` (enum[string]) - zoom control mode.
+            + `zoom_motor` (object,optional) - Motorised ZOOM params, required when `zoom_mode` EQ `motor`
+                + `speed_range` (array[number]) - \[Min, Max\] zoom motor speed
+
+            + `focus_mode` (enum[string]) - focus control mode.
+
+            + `focus_motor` (object,optional) - Motorised Focus params, required when `focus_mode` EQ `motor`
+                + `speed_range` (array[number]) - \[Min, Max\] focus motor speed
+                    
+            + `focal_length_range` (array[number],optional) -  \[Min, Max\] focal length in mm, required for non fixed ZOOM lens.
+            + `focal_length` (number,optional) - minimal focal length in mm, required for fixed ZOOM lens.
+        + `calibrate` (enum[string],optional)
+            + Members
+                + `p-iris` (string) - `p-iris` do calibrate.
+    + Body
+
+            {
+                "lens": {
+                    "name": "Theya SL1250P",
+                    "description:": "f=12-50mm,F1.8-F16",
+                    "iris_mode": "p-iris",
+                    "iris_p-iris": {
+                        "pulse_width_initial": 2000,
+                        "pulse_width_control": 2000,
+                        "iris_steps": 86,
+                        "phase_modulation_type": "4-phase"
+                    },
+                    
+                    "iris_number_range": [16.0, 1.8],
+
+                    "zoom_mode": "motor",
+                    "zoom_motor": {
+                        "speed_range":[128,160]
+                    },
+
+                    "focus_mode": "motor",
+                    "focus_motor": {
+                        "speed_range":[128,160]
+                    },
+
+                    "focal_length_range":[12, 50]
+                }
+            }
+
++ Response 200 (application/json)
+
+    + Body
+
+            {
+                "status": "no-error"
+            }
